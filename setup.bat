@@ -34,11 +34,6 @@ echo [OK] .gitignore created
 REM Create .env.example
 echo Creating .env.example...
 (
-echo # Supabase
-echo SUPABASE_URL=your-supabase-url
-echo SUPABASE_ANON_KEY=your-supabase-anon-key
-echo SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
-echo.
 echo # Database
 echo DATABASE_URL=postgresql://postgres:[password]@[host]:[port]/[database]
 echo.
@@ -67,7 +62,6 @@ echo   "dependencies": {
 echo     "@hono/node-server": "^1.13.7",
 echo     "@hono/swagger-ui": "^0.4.1",
 echo     "@hono/zod-openapi": "^0.16.4",
-echo     "@supabase/supabase-js": "^2.45.4",
 echo     "drizzle-orm": "^0.36.4",
 echo     "hono": "^4.6.14",
 echo     "postgres": "^3.4.5",
@@ -192,7 +186,7 @@ echo Backend API for Asset Management System
 echo.
 echo ## Setup
 echo.
-echo 1. Copy .env.example to .env and fill in your Supabase credentials
+echo 1. Copy .env.example to .env and fill in your database credentials
 echo 2. Run `npm install`
 echo 3. Copy code from artifacts into each .ts file
 echo 4. Run `npm run db:push`
@@ -218,7 +212,7 @@ echo Next steps:
 echo 1. Copy .env.example to .env
 echo    Run: copy .env.example .env
 echo.
-echo 2. Edit .env and add your Supabase credentials
+echo 2. Edit .env and add your database credentials
 echo.
 echo 3. Install dependencies
 echo    Run: npm install

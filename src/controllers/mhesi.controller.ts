@@ -7,10 +7,12 @@ export const mhesiController = {
     try {
       const search = c.req.query('search');
       const projectId = c.req.query('projectId');
-      
+      const departmentId = c.req.query('departmentId');
+
       const data = await mhesiService.getAll({
         search,
         projectId: projectId ? parseInt(projectId) : undefined,
+        departmentId: departmentId ? parseInt(departmentId) : undefined,
       });
       return successResponse(c, data, 'MHESI numbers retrieved successfully');
     } catch (error: any) {
@@ -22,11 +24,9 @@ export const mhesiController = {
     try {
       const id = parseInt(c.req.param('id'));
       const data = await mhesiService.getById(id);
-      
-      if (!data) {
-        return errorResponse(c, 'MHESI number not found', 404);
-      }
-      
+
+      if (!data) return errorResponse(c, 'MHESI number not found', 404);
+
       return successResponse(c, data, 'MHESI number retrieved successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
@@ -58,11 +58,9 @@ export const mhesiController = {
       const id = parseInt(c.req.param('id'));
       const body = await c.req.json();
       const data = await mhesiService.update(id, body);
-      
-      if (!data) {
-        return errorResponse(c, 'MHESI number not found', 404);
-      }
-      
+
+      if (!data) return errorResponse(c, 'MHESI number not found', 404);
+
       return successResponse(c, data, 'MHESI number updated successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
@@ -73,11 +71,9 @@ export const mhesiController = {
     try {
       const id = parseInt(c.req.param('id'));
       const data = await mhesiService.delete(id);
-      
-      if (!data) {
-        return errorResponse(c, 'MHESI number not found', 404);
-      }
-      
+
+      if (!data) return errorResponse(c, 'MHESI number not found', 404);
+
       return successResponse(c, data, 'MHESI number deleted successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);

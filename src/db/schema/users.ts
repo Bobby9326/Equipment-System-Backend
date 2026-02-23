@@ -1,12 +1,14 @@
-import { pgTable, serial, varchar, timestamp, integer } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, timestamp, integer, uuid } from 'drizzle-orm/pg-core';
 import { departments } from './masters';
 
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
-  username: varchar('username', { length: 255 }).notNull().unique(),
-  password: varchar('password', { length: 255 }).notNull(),
-  fullName: varchar('full_name', { length: 255 }).notNull(),
+  uuid: uuid('uuid').unique().notNull(),
+  email: varchar('email', { length: 100 }).notNull().unique(),
+  firstName: varchar('first_name', { length: 100 }),
+  lastName: varchar('last_name', { length: 100 }),
   role: varchar('role', { length: 50 }).notNull(),
   departmentId: integer('department_id').references(() => departments.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
 });

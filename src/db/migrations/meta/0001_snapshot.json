@@ -1,6 +1,6 @@
 {
-  "id": "91ae1390-cb94-4aec-8c3e-ee1fe28a68b6",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "340142b2-a659-4bef-913a-c8ca726004ed",
+  "prevId": "91ae1390-cb94-4aec-8c3e-ee1fe28a68b6",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1243,9 +1243,9 @@
         },
         "fund_code": {
           "name": "fund_code",
-          "type": "char",
+          "type": "char(4)",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "name": {
           "name": "name",

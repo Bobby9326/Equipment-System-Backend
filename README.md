@@ -4,11 +4,10 @@ Backend API for Asset Management System
 
 ## Setup
 
-1. Copy .env.example to .env and fill in your Supabase credentials
-2. Run `npm install`
-3. Copy code from artifacts into each .ts file
-4. Run `npm run db:push`
-5. Run `npm run dev`
+1. Run `npm install`
+2. Copy code from artifacts into each .ts file
+3. Run `npm run db:push`
+4. Run `npm run dev`
 
 ## Documentation
 

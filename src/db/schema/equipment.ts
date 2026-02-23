@@ -1,0 +1,47 @@
+import { pgTable, serial, varchar, integer, decimal, date, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  departments,
+  activities,
+  funds,
+  equipmentTypes,
+  acquisitionSources,
+  acquisitionMethods,
+  buildings,
+  rooms,
+} from './masters';
+import { projects } from './projects';
+import { attachments } from './attachments';
+
+export const equipment = pgTable('equipment', {
+  id: serial('id').primaryKey(),
+  uuid: uuid('uuid').unique().notNull(),
+  equipmentCode: varchar('equipment_code', { length: 100 }).notNull().unique(),
+  equipmentName: varchar('equipment_name', { length: 255 }).notNull(),
+  equipmentNumber: varchar('equipment_number', { length: 100 }),
+  equipmentTypeId: integer('equipment_type_id').references(() => equipmentTypes.id),
+  departmentId: integer('department_id').references(() => departments.id),
+  activityId: integer('activity_id').references(() => activities.id),
+  fundId: integer('fund_id').references(() => funds.id),
+  fiscalYear: integer('fiscal_year'),
+  price: decimal('price', { precision: 15, scale: 2 }),
+  unit: integer('unit'),
+  acquisitionSourceId: integer('acquisition_source_id').references(() => acquisitionSources.id),
+  acquisitionMethodId: integer('acquisition_method_id').references(() => acquisitionMethods.id),
+  acquisitionDate: date('acquisition_date'),
+  company: varchar('company', { length: 255 }),
+  sizeDetail: text('size_detail'),
+  buildingId: integer("building_id").references(() => buildings.id),
+  roomId: integer('room_id').references(() => rooms.id),
+  projectId: integer('project_id').references(() => projects.id),
+  status: varchar('status', { length: 50 }).default('available'),
+  note: text('note'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
+});
+
+export const equipmentAttachments = pgTable('equipment_attachments', {
+  id: serial('id').primaryKey(),
+  equipmentId: integer('equipment_id').references(() => equipment.id).notNull(),
+  attachmentId: integer('attachment_id').references(() => attachments.id).notNull(),
+});

@@ -2,8 +2,8 @@ import { Hono } from 'hono';
 import masters from './masters.routes.js';
 import projects from './projects.routes.js';
 import mhesi from './mhesi.routes.js';
-import assets from './assets.routes.js';
-import assetStatus from './asset-status.routes.js';
+import assets from './equipment.routes.js';
+import assetStatus from './equipment-status.routes.js';
 import attachments from './attachments.routes.js';
 
 const routes = new Hono();

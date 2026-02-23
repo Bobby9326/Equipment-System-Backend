@@ -12,26 +12,13 @@ export const attachmentsController = {
     }
   },
 
-  getByReference: async (c: Context) => {
-    try {
-      const refType = c.req.param('refType');
-      const refId = parseInt(c.req.param('refId'));
-      const data = await attachmentsService.getByReference(refType, refId);
-      return successResponse(c, data, 'Attachments retrieved successfully');
-    } catch (error: any) {
-      return errorResponse(c, error.message, 500);
-    }
-  },
-
   getById: async (c: Context) => {
     try {
       const id = parseInt(c.req.param('id'));
       const data = await attachmentsService.getById(id);
-      
-      if (!data) {
-        return errorResponse(c, 'Attachment not found', 404);
-      }
-      
+
+      if (!data) return errorResponse(c, 'Attachment not found', 404);
+
       return successResponse(c, data, 'Attachment retrieved successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
@@ -53,11 +40,9 @@ export const attachmentsController = {
       const id = parseInt(c.req.param('id'));
       const body = await c.req.json();
       const data = await attachmentsService.update(id, body);
-      
-      if (!data) {
-        return errorResponse(c, 'Attachment not found', 404);
-      }
-      
+
+      if (!data) return errorResponse(c, 'Attachment not found', 404);
+
       return successResponse(c, data, 'Attachment updated successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
@@ -68,23 +53,10 @@ export const attachmentsController = {
     try {
       const id = parseInt(c.req.param('id'));
       const data = await attachmentsService.delete(id);
-      
-      if (!data) {
-        return errorResponse(c, 'Attachment not found', 404);
-      }
-      
-      return successResponse(c, data, 'Attachment deleted successfully');
-    } catch (error: any) {
-      return errorResponse(c, error.message, 500);
-    }
-  },
 
-  deleteByReference: async (c: Context) => {
-    try {
-      const refType = c.req.param('refType');
-      const refId = parseInt(c.req.param('refId'));
-      const data = await attachmentsService.deleteByReference(refType, refId);
-      return successResponse(c, data, 'Attachments deleted successfully');
+      if (!data) return errorResponse(c, 'Attachment not found', 404);
+
+      return successResponse(c, data, 'Attachment deleted successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
     }

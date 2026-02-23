@@ -7,7 +7,7 @@ export const projectsController = {
     try {
       const search = c.req.query('search');
       const status = c.req.query('status');
-      
+
       const data = await projectsService.getAll({ search, status });
       return successResponse(c, data, 'Projects retrieved successfully');
     } catch (error: any) {
@@ -19,11 +19,9 @@ export const projectsController = {
     try {
       const id = parseInt(c.req.param('id'));
       const data = await projectsService.getById(id);
-      
-      if (!data) {
-        return errorResponse(c, 'Project not found', 404);
-      }
-      
+
+      if (!data) return errorResponse(c, 'Project not found', 404);
+
       return successResponse(c, data, 'Project retrieved successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
@@ -45,11 +43,9 @@ export const projectsController = {
       const id = parseInt(c.req.param('id'));
       const body = await c.req.json();
       const data = await projectsService.update(id, body);
-      
-      if (!data) {
-        return errorResponse(c, 'Project not found', 404);
-      }
-      
+
+      if (!data) return errorResponse(c, 'Project not found', 404);
+
       return successResponse(c, data, 'Project updated successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
@@ -60,11 +56,9 @@ export const projectsController = {
     try {
       const id = parseInt(c.req.param('id'));
       const data = await projectsService.delete(id);
-      
-      if (!data) {
-        return errorResponse(c, 'Project not found', 404);
-      }
-      
+
+      if (!data) return errorResponse(c, 'Project not found', 404);
+
       return successResponse(c, data, 'Project deleted successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);

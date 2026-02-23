@@ -1,17 +1,26 @@
 import { db } from '../config/database.js';
 import { mhesiNumbers } from '../db/schema/index.js';
-import { eq, like } from 'drizzle-orm';
+import { eq, like, or } from 'drizzle-orm';
 
 export const mhesiService = {
-  getAll: async (filters?: { search?: string; projectId?: number }) => {
+  getAll: async (filters?: { search?: string; projectId?: number; departmentId?: number }) => {
     let query = db.select().from(mhesiNumbers);
 
     if (filters?.search) {
-      query = query.where(like(mhesiNumbers.mhesiNumber, `%${filters.search}%`)) as any;
+      query = query.where(
+        or(
+          like(mhesiNumbers.mhesiNumber, `%${filters.search}%`),
+          like(mhesiNumbers.activityName, `%${filters.search}%`)
+        )
+      ) as any;
     }
 
     if (filters?.projectId) {
       query = query.where(eq(mhesiNumbers.projectId, filters.projectId)) as any;
+    }
+
+    if (filters?.departmentId) {
+      query = query.where(eq(mhesiNumbers.departmentId, filters.departmentId)) as any;
     }
 
     return await query;
@@ -33,14 +42,17 @@ export const mhesiService = {
 
   update: async (id: number, data: Partial<typeof mhesiNumbers.$inferInsert>) => {
     const result = await db.update(mhesiNumbers)
-      .set(data)
+      .set({ ...data, updatedAt: new Date() })
       .where(eq(mhesiNumbers.id, id))
       .returning();
     return result[0] || null;
   },
 
   delete: async (id: number) => {
-    const result = await db.delete(mhesiNumbers).where(eq(mhesiNumbers.id, id)).returning();
+    const result = await db.update(mhesiNumbers)
+      .set({ deletedAt: new Date() })
+      .where(eq(mhesiNumbers.id, id))
+      .returning();
     return result[0] || null;
   },
 };
