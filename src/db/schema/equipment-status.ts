@@ -33,6 +33,7 @@ export const equipmentRepairs = pgTable('equipment_repairs', {
   cost: decimal('cost', { precision: 15, scale: 2 }),
   startDate: date('start_date').notNull(),
   endDate: date('end_date'),
+  actualEndDate: date('actual_end_date'),
   attachmentId: integer('attachment_id').references(() => attachments.id),
   createdBy: integer('created_by').references(() => users.id).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),

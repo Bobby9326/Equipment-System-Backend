@@ -11,7 +11,9 @@ const app = new Hono();
 // Global Middlewares
 app.use('*', corsConfig);
 app.use('*', loggerMiddleware);
-app.use('*', errorHandler);
+
+// Global Error Handler
+app.onError(errorHandler);
 
 // Root endpoint
 app.get('/', (c) => {

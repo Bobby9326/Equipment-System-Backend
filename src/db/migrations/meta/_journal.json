@@ -15,6 +15,41 @@
       "when": 1771743722382,
       "tag": "0001_awesome_screwball",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1771862802929,
+      "tag": "0002_orange_ma_gnuci",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1771863072697,
+      "tag": "0003_concerned_excalibur",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1772024331252,
+      "tag": "0004_secret_the_captain",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1772025352033,
+      "tag": "0005_smart_amphibian",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1772209422303,
+      "tag": "0006_adorable_sentinels",
+      "breakpoints": true
     }
   ]
 }

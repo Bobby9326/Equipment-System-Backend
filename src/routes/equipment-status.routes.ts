@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import {
+  changeStatusController,
   equipmentNormalsController,
   equipmentBorrowsController,
   equipmentRepairsController,
@@ -10,50 +11,46 @@ import {
 
 const equipmentStatus = new Hono();
 
-// Equipment Normals
+// Change Status — เส้นหลักสำหรับเปลี่ยนสถานะ
+equipmentStatus.post('/change', changeStatusController.change);
+
+// Equipment Normals — GET / PUT / DELETE เท่านั้น
 equipmentStatus.get('/normals', equipmentNormalsController.getAll);
-equipmentStatus.get('/normals/:id', equipmentNormalsController.getById);
 equipmentStatus.get('/normals/equipment/:equipmentId', equipmentNormalsController.getByEquipmentId);
-equipmentStatus.post('/normals', equipmentNormalsController.create);
+equipmentStatus.get('/normals/:id', equipmentNormalsController.getById);
 equipmentStatus.put('/normals/:id', equipmentNormalsController.update);
 equipmentStatus.delete('/normals/:id', equipmentNormalsController.delete);
 
-// Equipment Borrows
+// Equipment Borrows — GET / PUT / DELETE เท่านั้น
 equipmentStatus.get('/borrows', equipmentBorrowsController.getAll);
-equipmentStatus.get('/borrows/:id', equipmentBorrowsController.getById);
 equipmentStatus.get('/borrows/equipment/:equipmentId', equipmentBorrowsController.getByEquipmentId);
-equipmentStatus.post('/borrows', equipmentBorrowsController.create);
+equipmentStatus.get('/borrows/:id', equipmentBorrowsController.getById);
 equipmentStatus.put('/borrows/:id', equipmentBorrowsController.update);
-equipmentStatus.patch('/borrows/:id/return', equipmentBorrowsController.returnEquipment);
 equipmentStatus.delete('/borrows/:id', equipmentBorrowsController.delete);
 
-// Equipment Repairs
+// Equipment Repairs — GET / PUT / DELETE เท่านั้น
 equipmentStatus.get('/repairs', equipmentRepairsController.getAll);
-equipmentStatus.get('/repairs/:id', equipmentRepairsController.getById);
 equipmentStatus.get('/repairs/equipment/:equipmentId', equipmentRepairsController.getByEquipmentId);
-equipmentStatus.post('/repairs', equipmentRepairsController.create);
+equipmentStatus.get('/repairs/:id', equipmentRepairsController.getById);
 equipmentStatus.put('/repairs/:id', equipmentRepairsController.update);
 equipmentStatus.delete('/repairs/:id', equipmentRepairsController.delete);
 
-// Equipment Unavailable
+// Equipment Unavailable — GET / PUT / DELETE เท่านั้น
 equipmentStatus.get('/unavailable', equipmentUnavailableController.getAll);
-equipmentStatus.get('/unavailable/:id', equipmentUnavailableController.getById);
 equipmentStatus.get('/unavailable/equipment/:equipmentId', equipmentUnavailableController.getByEquipmentId);
-equipmentStatus.post('/unavailable', equipmentUnavailableController.create);
+equipmentStatus.get('/unavailable/:id', equipmentUnavailableController.getById);
 equipmentStatus.put('/unavailable/:id', equipmentUnavailableController.update);
 equipmentStatus.delete('/unavailable/:id', equipmentUnavailableController.delete);
 
-// Equipment Disposals
+// Equipment Disposals — GET / PUT / DELETE เท่านั้น
 equipmentStatus.get('/disposals', equipmentDisposalsController.getAll);
-equipmentStatus.get('/disposals/:id', equipmentDisposalsController.getById);
 equipmentStatus.get('/disposals/equipment/:equipmentId', equipmentDisposalsController.getByEquipmentId);
-equipmentStatus.post('/disposals', equipmentDisposalsController.create);
+equipmentStatus.get('/disposals/:id', equipmentDisposalsController.getById);
 equipmentStatus.put('/disposals/:id', equipmentDisposalsController.update);
 equipmentStatus.delete('/disposals/:id', equipmentDisposalsController.delete);
 
-// Equipment Status Logs (read + create only)
+// Equipment Status Logs — GET เท่านั้น (สร้างอัตโนมัติผ่าน /change)
 equipmentStatus.get('/logs', equipmentStatusLogsController.getAll);
 equipmentStatus.get('/logs/equipment/:equipmentId', equipmentStatusLogsController.getByEquipmentId);
-equipmentStatus.post('/logs', equipmentStatusLogsController.create);
 
 export default equipmentStatus;

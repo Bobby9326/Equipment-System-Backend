@@ -1,64 +1,49 @@
-import { Context, Next } from 'hono';
+import { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 
-export const errorHandler = async (c: Context, next: Next) => {
-  try {
-    await next();
-  } catch (err: any) {
-    console.error('Error:', err);
+export class BusinessError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BusinessError';
+  }
+}
 
-    if (err instanceof HTTPException) {
-      return c.json(
-        {
-          success: false,
-          message: err.message,
-          status: err.status,
-        },
-        err.status
-      );
-    }
+// ใช้กับ app.onError — signature คือ (err, c)
+export const errorHandler = (err: any, c: Context) => {
+  console.error('Error:', err);
 
-    // Drizzle/Database errors
-    if (err.code) {
-      let message = 'Database error';
-      let status = 500;
+  if (err instanceof HTTPException) {
+    return c.json({ success: false, message: err.message }, err.status);
+  }
 
-      // PostgreSQL error codes
-      switch (err.code) {
-        case '23505': // unique_violation
-          message = 'Duplicate entry';
-          status = 409;
-          break;
-        case '23503': // foreign_key_violation
-          message = 'Referenced record does not exist';
-          status = 400;
-          break;
-        case '23502': // not_null_violation
-          message = 'Required field is missing';
-          status = 400;
-          break;
-        default:
-          message = err.message || 'Database error';
-      }
+  if (err.name === 'BusinessError') {
+    return c.json({ success: false, message: err.message }, 400);
+  }
 
-      return c.json(
-        {
-          success: false,
-          message,
-          error: process.env.NODE_ENV === 'development' ? err.message : undefined,
-        },
-        status as any
-      );
-    }
-
-    // Generic error
+  // Drizzle/PostgreSQL errors
+  if (err.code) {
+    const map: Record<string, [string, number]> = {
+      '23505': ['Duplicate entry', 409],
+      '23503': ['Referenced record does not exist', 400],
+      '23502': ['Required field is missing', 400],
+    };
+    const [message, status] = map[err.code] ?? [err.message || 'Database error', 500];
     return c.json(
       {
         success: false,
-        message: err.message || 'Internal server error',
-        error: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+        message,
+        error: process.env.NODE_ENV === 'development' ? err.message : undefined,
       },
-      500 as any
+      status as any
     );
   }
+
+  return c.json(
+    {
+      success: false,
+      message: err.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    },
+    500
+  );
 };

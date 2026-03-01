@@ -1,6 +1,8 @@
+import { randomUUID } from 'crypto';
 import { db } from '../config/database.js';
 import { equipment } from '../db/schema/index.js';
-import { eq, like, and, sql } from 'drizzle-orm';
+import { eq, like, and, sql, isNull } from 'drizzle-orm';
+import { BusinessError } from '../middlewares/error.js';
 
 export const equipmentService = {
   getAll: async (filters?: {
@@ -15,7 +17,7 @@ export const equipmentService = {
     const limit = filters?.limit || 10;
     const offset = (page - 1) * limit;
 
-    const conditions = [];
+    const conditions = [isNull(equipment.deletedAt)];
 
     if (filters?.search) {
       conditions.push(like(equipment.equipmentName, `%${filters.search}%`));
@@ -30,7 +32,7 @@ export const equipmentService = {
       conditions.push(eq(equipment.equipmentTypeId, filters.equipmentTypeId));
     }
 
-    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    const whereClause = and(...conditions);
 
     const data = await db
       .select()
@@ -52,8 +54,8 @@ export const equipmentService = {
     };
   },
 
-  getById: async (id: number) => {
-    const result = await db.select().from(equipment).where(eq(equipment.id, id));
+  getByUuid: async (uuid: string) => {
+    const result = await db.select().from(equipment).where(eq(equipment.uuid, uuid));
     return result[0] || null;
   },
 
@@ -62,58 +64,73 @@ export const equipmentService = {
     return result[0] || null;
   },
 
-  create: async (data: typeof equipment.$inferInsert) => {
-    const result = await db.insert(equipment).values(data).returning();
-    return result[0];
+  create: async (params: {
+    numberPrefix: string;
+    start: number;
+    end?: number;
+    padLength?: number;
+    userUuid: string;
+    data: Omit<typeof equipment.$inferInsert, 'equipmentNumber'>;
+  }) => {
+    const { numberPrefix, start, end, padLength = 3, data } = params;
+    const endNum = end ?? start;
+
+    if (start > endNum) throw new BusinessError('ลำดับเริ่มต้นต้องน้อยกว่าหรือเท่ากับลำดับสิ้นสุด');
+    if (endNum - start + 1 > 100) throw new BusinessError('สร้างได้ไม่เกิน 100 รายการต่อครั้ง');
+
+    const rows: (typeof equipment.$inferInsert)[] = [];
+
+    for (let i = start; i <= endNum; i++) {
+      const seq = String(i).padStart(padLength, '0');
+      const equipmentNumber = `${numberPrefix}-${seq}`;
+
+      const existing = await db.select().from(equipment).where(eq(equipment.equipmentNumber, equipmentNumber));
+      if (existing[0]) throw new BusinessError(`เลขครุภัณฑ์ ${equipmentNumber} มีอยู่ในระบบแล้ว`);
+
+      rows.push({ ...data, uuid: randomUUID(), equipmentNumber });
+    }
+
+    return await db.insert(equipment).values(rows).returning();
   },
 
-  update: async (id: number, data: Partial<typeof equipment.$inferInsert>) => {
+  updateByUuid: async (uuid: string, data: Partial<typeof equipment.$inferInsert>) => {
     const result = await db.update(equipment)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(equipment.id, id))
+      .where(eq(equipment.uuid, uuid))
       .returning();
     return result[0] || null;
   },
 
-  delete: async (id: number) => {
+  deleteByUuid: async (uuid: string) => {
     const result = await db.update(equipment)
       .set({ deletedAt: new Date() })
-      .where(eq(equipment.id, id))
+      .where(eq(equipment.uuid, uuid))
       .returning();
     return result[0] || null;
   },
 
-  updateStatus: async (id: number, status: string) => {
-    const result = await db.update(equipment)
-      .set({ status, updatedAt: new Date() })
-      .where(eq(equipment.id, id))
-      .returning();
-    return result[0] || null;
-  },
+  getStats: async (departmentId?: number) => {
+    const conditions = [isNull(equipment.deletedAt)];
+    if (departmentId) conditions.push(eq(equipment.departmentId, departmentId));
+    const whereClause = and(...conditions);
 
-  getStats: async () => {
-    const total = await db.select({ count: sql<number>`count(*)` }).from(equipment);
+    const total = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(equipment)
+      .where(whereClause);
 
     const byStatus = await db
-      .select({
-        status: equipment.status,
-        count: sql<number>`count(*)`,
-      })
+      .select({ status: equipment.status, count: sql<number>`count(*)` })
       .from(equipment)
+      .where(whereClause)
       .groupBy(equipment.status);
 
     const byDepartment = await db
-      .select({
-        departmentId: equipment.departmentId,
-        count: sql<number>`count(*)`,
-      })
+      .select({ departmentId: equipment.departmentId, count: sql<number>`count(*)` })
       .from(equipment)
+      .where(whereClause)
       .groupBy(equipment.departmentId);
 
-    return {
-      total: total[0].count,
-      byStatus,
-      byDepartment,
-    };
+    return { total: total[0].count, byStatus, byDepartment };
   },
 };

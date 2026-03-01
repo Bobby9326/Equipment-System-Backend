@@ -1,6 +1,10 @@
 import { Context } from 'hono';
 import { successResponse, errorResponse } from '../utils/response.js';
+import { db } from '../config/database.js';
+import { equipment } from '../db/schema/index.js';
+import { inArray } from 'drizzle-orm';
 import {
+  changeStatusService,
   equipmentNormalsService,
   equipmentBorrowsService,
   equipmentRepairsService,
@@ -8,9 +12,63 @@ import {
   equipmentDisposalsService,
   equipmentStatusLogsService,
 } from '../services/equipment-status.service.js';
+import { isAdminOrManager } from '../utils/permission.js';
 
-// Generic controller factory for equipment status tables
-const createEquipmentStatusController = (service: any, name: string) => ({
+// ============================================================
+// CHANGE STATUS — เส้นหลักสำหรับเปลี่ยนสถานะครุภัณฑ์
+// POST /api/equipment-status/change
+// ============================================================
+
+export const changeStatusController = {
+  change: async (c: Context) => {
+    try {
+      const user = c.get('user');
+      const { equipmentIds, newStatus, data } = await c.req.json();
+
+      if (!Array.isArray(equipmentIds) || equipmentIds.length === 0)
+        return errorResponse(c, 'equipmentIds must be a non-empty array', 400);
+      if (!newStatus)
+        return errorResponse(c, 'newStatus is required', 400);
+
+      const validStatuses = ['normal', 'borrowed', 'repair', 'unavailable', 'disposed'];
+      if (!validStatuses.includes(newStatus))
+        return errorResponse(c, `newStatus must be one of: ${validStatuses.join(', ')}`, 400);
+
+      // ตรวจสอบ department permission
+      if (!isAdminOrManager(user)) {
+        const equipmentList = await db
+          .select({ departmentId: equipment.departmentId })
+          .from(equipment)
+          .where(inArray(equipment.id, equipmentIds));
+
+        const hasOtherDept = equipmentList.some(e => e.departmentId !== user.departmentId);
+        if (hasOtherDept) return errorResponse(c, 'ไม่มีสิทธิ์จัดการครุภัณฑ์ของ department อื่น', 403);
+      }
+
+      const result = await changeStatusService.change({
+        equipmentIds,
+        newStatus,
+        data: data || {},
+        userUuid: user.uuid, // ดึงจาก token ไม่รับจาก body
+      });
+
+      return successResponse(
+        c,
+        result,
+        `เปลี่ยนสถานะครุภัณฑ์ ${result.length} รายการเป็น "${newStatus}" สำเร็จ`
+      );
+    } catch (error: any) {
+      return errorResponse(c, error.message, 500);
+    }
+  },
+};
+
+// ============================================================
+// INDIVIDUAL STATUS TABLES — GET / UPDATE / DELETE เท่านั้น
+// (ไม่มี create เพราะสร้างผ่าน changeStatus แทน)
+// ============================================================
+
+const createReadUpdateDeleteController = (service: any, name: string) => ({
   getAll: async (c: Context) => {
     try {
       const data = await service.getAll();
@@ -34,20 +92,8 @@ const createEquipmentStatusController = (service: any, name: string) => ({
     try {
       const id = parseInt(c.req.param('id'));
       const data = await service.getById(id);
-
       if (!data) return errorResponse(c, `${name} not found`, 404);
-
       return successResponse(c, data, `${name} retrieved successfully`);
-    } catch (error: any) {
-      return errorResponse(c, error.message, 500);
-    }
-  },
-
-  create: async (c: Context) => {
-    try {
-      const body = await c.req.json();
-      const data = await service.create(body);
-      return successResponse(c, data, `${name} created successfully`, 201);
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
     }
@@ -58,9 +104,7 @@ const createEquipmentStatusController = (service: any, name: string) => ({
       const id = parseInt(c.req.param('id'));
       const body = await c.req.json();
       const data = await service.update(id, body);
-
       if (!data) return errorResponse(c, `${name} not found`, 404);
-
       return successResponse(c, data, `${name} updated successfully`);
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
@@ -71,9 +115,7 @@ const createEquipmentStatusController = (service: any, name: string) => ({
     try {
       const id = parseInt(c.req.param('id'));
       const data = await service.delete(id);
-
       if (!data) return errorResponse(c, `${name} not found`, 404);
-
       return successResponse(c, data, `${name} deleted successfully`);
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
@@ -81,34 +123,13 @@ const createEquipmentStatusController = (service: any, name: string) => ({
   },
 });
 
-export const equipmentNormalsController = createEquipmentStatusController(equipmentNormalsService, 'Equipment Normal');
+export const equipmentNormalsController     = createReadUpdateDeleteController(equipmentNormalsService,     'Equipment Normal');
+export const equipmentBorrowsController     = createReadUpdateDeleteController(equipmentBorrowsService,     'Equipment Borrow');
+export const equipmentRepairsController     = createReadUpdateDeleteController(equipmentRepairsService,     'Equipment Repair');
+export const equipmentUnavailableController = createReadUpdateDeleteController(equipmentUnavailableService, 'Equipment Unavailable');
+export const equipmentDisposalsController   = createReadUpdateDeleteController(equipmentDisposalsService,   'Equipment Disposal');
 
-export const equipmentBorrowsController = {
-  ...createEquipmentStatusController(equipmentBorrowsService, 'Equipment Borrow'),
-
-  returnEquipment: async (c: Context) => {
-    try {
-      const id = parseInt(c.req.param('id'));
-      const { actualReturnDate } = await c.req.json();
-
-      if (!actualReturnDate) return errorResponse(c, 'Actual return date is required', 400);
-
-      const data = await equipmentBorrowsService.returnEquipment(id, new Date(actualReturnDate));
-
-      if (!data) return errorResponse(c, 'Equipment borrow not found', 404);
-
-      return successResponse(c, data, 'Equipment returned successfully');
-    } catch (error: any) {
-      return errorResponse(c, error.message, 500);
-    }
-  },
-};
-
-export const equipmentRepairsController = createEquipmentStatusController(equipmentRepairsService, 'Equipment Repair');
-export const equipmentUnavailableController = createEquipmentStatusController(equipmentUnavailableService, 'Equipment Unavailable');
-export const equipmentDisposalsController = createEquipmentStatusController(equipmentDisposalsService, 'Equipment Disposal');
-
-// Status Logs controller (read + create only)
+// Status Logs — read only
 export const equipmentStatusLogsController = {
   getAll: async (c: Context) => {
     try {
@@ -124,16 +145,6 @@ export const equipmentStatusLogsController = {
       const equipmentId = parseInt(c.req.param('equipmentId'));
       const data = await equipmentStatusLogsService.getByEquipmentId(equipmentId);
       return successResponse(c, data, 'Equipment status logs retrieved successfully');
-    } catch (error: any) {
-      return errorResponse(c, error.message, 500);
-    }
-  },
-
-  create: async (c: Context) => {
-    try {
-      const body = await c.req.json();
-      const data = await equipmentStatusLogsService.create(body);
-      return successResponse(c, data, 'Equipment status log created successfully', 201);
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
     }

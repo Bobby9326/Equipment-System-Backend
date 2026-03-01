@@ -1,0 +1,1 @@
+ALTER TABLE "equipment_repairs" ADD COLUMN "actual_end_date" date;

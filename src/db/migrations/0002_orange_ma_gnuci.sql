@@ -1,0 +1,1 @@
+ALTER TABLE "equipment" ALTER COLUMN "unit" SET DATA TYPE varchar(100);
