@@ -2,23 +2,20 @@ export const swaggerConfig = {
   openapi: '3.0.0',
   info: {
     title: 'Equipment Management API',
-    version: '2.0.0',
-    description: 'API documentation for Equipment Management System',
+    version: '3.0.0',
+    description: 'API documentation for Equipment Management System\n\n**Auth:** Cookie-based (httpOnly)\n- ทุก request ต้องใช้ `withCredentials: true` (axios) หรือ `credentials: "include"` (fetch)\n- เมื่อได้ 401 → ยิง `POST /api/auth/refresh` แล้ว retry\n\n**Permission:**\n- Admin / Department 1: เข้าถึงได้ทุก department\n- User ทั่วไป: เข้าถึงได้เฉพาะ department ตัวเอง',
   },
-  servers: [
-    {
-      url: 'http://localhost:3000',
-      description: 'Development server',
-    },
-  ],
+  servers: [{ url: 'http://localhost:3000', description: 'Development server' }],
   tags: [
-    { name: 'Masters', description: 'Master data (read-only)' },
-    { name: 'Projects', description: 'Project management' },
-    { name: 'MHESI', description: 'MHESI number management' },
-    { name: 'Equipment', description: 'Equipment management' },
+    { name: 'Auth',             description: 'Authentication (Google OAuth + JWT Cookie)' },
+    { name: 'Masters',          description: 'Master data — ไม่ต้อง login · ใช้โหลด dropdown' },
+    { name: 'Equipment',        description: 'Equipment management — ใช้ UUID' },
     { name: 'Equipment Status', description: 'Equipment status tracking' },
-    { name: 'Attachments', description: 'File attachment management' },
-    { name: 'Health', description: 'Health check' },
+    { name: 'Attachments',      description: 'File upload management' },
+    { name: 'Projects',         description: 'Project management' },
+    { name: 'MHESI',            description: 'MHESI number management' },
+    { name: 'Reports',          description: 'Reports & depreciation calculation' },
+    { name: 'Health',           description: 'Health check' },
   ],
   components: {
     schemas: {
@@ -57,7 +54,62 @@ export const swaggerConfig = {
   },
   paths: {
 
-    // ==================== MASTERS (GET ONLY) ====================
+    // ==================== AUTH ====================
+
+    '/api/auth/google': {
+      get: {
+        tags: ['Auth'],
+        summary: 'Login ด้วย Google OAuth',
+        description: 'Redirect browser ไปหน้า Google Login\n```js\nwindow.location.href = "http://localhost:3000/api/auth/google"\n```',
+        responses: { '302': { description: 'Redirect to Google' } },
+      },
+    },
+    '/api/auth/google/callback': {
+      get: {
+        tags: ['Auth'],
+        summary: 'Google OAuth callback (ระบบจัดการเอง)',
+        description: 'Google redirect กลับมาที่นี่ → set cookie access_token + refresh_token → redirect ไป FRONTEND_URL',
+        responses: { '302': { description: 'Redirect to frontend' } },
+      },
+    },
+    '/api/auth/me': {
+      get: {
+        tags: ['Auth'],
+        summary: 'ดูข้อมูล user ปัจจุบัน',
+        responses: {
+          '200': {
+            description: 'Success',
+            content: {
+              'application/json': {
+                example: { success: true, data: { uuid: '3fa85f64-5717-4562-b3fc-2c963f66afa6', role: 'user', departmentId: 2 } },
+              },
+            },
+          },
+          '401': { description: 'Unauthorized' },
+        },
+      },
+    },
+    '/api/auth/refresh': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Refresh access token',
+        description: 'ใช้เมื่อได้รับ 401 — ออก access_token ใหม่โดยใช้ refresh_token จาก cookie',
+        responses: {
+          '200': { description: 'Token refreshed — set access_token cookie ใหม่' },
+          '401': { description: 'Refresh token หมดอายุ → ต้อง login ใหม่' },
+        },
+      },
+    },
+    '/api/auth/logout': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Logout',
+        description: 'ลบ cookie ทั้งสองตัว และลบ refresh token ออกจาก database',
+        responses: { '200': { description: 'Logged out' } },
+      },
+    },
+
+    // ==================== MASTERS ====================
 
     '/api/masters/departments': {
       get: { tags: ['Masters'], summary: 'Get all departments', responses: { '200': { description: 'Success' } } },
@@ -68,71 +120,422 @@ export const swaggerConfig = {
     '/api/masters/activities': {
       get: { tags: ['Masters'], summary: 'Get all activities', responses: { '200': { description: 'Success' } } },
     },
-    '/api/masters/activities/{id}': {
-      get: { tags: ['Masters'], summary: 'Get activity by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
-    },
     '/api/masters/funds': {
       get: { tags: ['Masters'], summary: 'Get all funds', responses: { '200': { description: 'Success' } } },
-    },
-    '/api/masters/funds/{id}': {
-      get: { tags: ['Masters'], summary: 'Get fund by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
     },
     '/api/masters/equipment-types': {
       get: { tags: ['Masters'], summary: 'Get all equipment types', responses: { '200': { description: 'Success' } } },
     },
-    '/api/masters/equipment-types/{id}': {
-      get: { tags: ['Masters'], summary: 'Get equipment type by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
-    },
     '/api/masters/acquisition-sources': {
       get: { tags: ['Masters'], summary: 'Get all acquisition sources', responses: { '200': { description: 'Success' } } },
-    },
-    '/api/masters/acquisition-sources/{id}': {
-      get: { tags: ['Masters'], summary: 'Get acquisition source by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
     },
     '/api/masters/acquisition-methods': {
       get: { tags: ['Masters'], summary: 'Get all acquisition methods', responses: { '200': { description: 'Success' } } },
     },
-    '/api/masters/acquisition-methods/{id}': {
-      get: { tags: ['Masters'], summary: 'Get acquisition method by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
-    },
     '/api/masters/buildings': {
       get: { tags: ['Masters'], summary: 'Get all buildings', responses: { '200': { description: 'Success' } } },
-    },
-    '/api/masters/buildings/{id}': {
-      get: { tags: ['Masters'], summary: 'Get building by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
-    },
-    '/api/masters/room-types': {
-      get: { tags: ['Masters'], summary: 'Get all room types', responses: { '200': { description: 'Success' } } },
-    },
-    '/api/masters/room-types/{id}': {
-      get: { tags: ['Masters'], summary: 'Get room type by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
     },
     '/api/masters/rooms': {
       get: { tags: ['Masters'], summary: 'Get all rooms', responses: { '200': { description: 'Success' } } },
     },
-    '/api/masters/rooms/{id}': {
-      get: { tags: ['Masters'], summary: 'Get room by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
-    },
     '/api/masters/rooms/building/{buildingId}': {
-      get: { tags: ['Masters'], summary: 'Get rooms by building', parameters: [{ name: 'buildingId', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'Success' } } },
+      get: { tags: ['Masters'], summary: 'Get rooms by building', parameters: [{ name: 'buildingId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
     },
     '/api/masters/support-units': {
       get: { tags: ['Masters'], summary: 'Get all support units', responses: { '200': { description: 'Success' } } },
     },
-    '/api/masters/support-units/{id}': {
-      get: { tags: ['Masters'], summary: 'Get support unit by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
-    },
     '/api/masters/plan-sections': {
       get: { tags: ['Masters'], summary: 'Get all plan sections', responses: { '200': { description: 'Success' } } },
-    },
-    '/api/masters/plan-sections/{id}': {
-      get: { tags: ['Masters'], summary: 'Get plan section by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
     },
     '/api/masters/project-types': {
       get: { tags: ['Masters'], summary: 'Get all project types', responses: { '200': { description: 'Success' } } },
     },
-    '/api/masters/project-types/{id}': {
-      get: { tags: ['Masters'], summary: 'Get project type by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
+
+    // ==================== EQUIPMENT ====================
+
+    '/api/equipment': {
+      get: {
+        tags: ['Equipment'],
+        summary: 'Get all equipment',
+        parameters: [
+          { name: 'search', in: 'query', schema: { type: 'string' } },
+          { name: 'status', in: 'query', schema: { type: 'string', enum: ['normal', 'borrowed', 'repair', 'unavailable', 'disposed'] } },
+          { name: 'departmentId', in: 'query', schema: { type: 'integer' }, description: 'admin/dept.1 เท่านั้น' },
+          { name: 'equipmentTypeId', in: 'query', schema: { type: 'integer' } },
+          { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', default: 10 } },
+        ],
+        responses: { '200': { description: 'Success', content: { 'application/json': { schema: { $ref: '#/components/schemas/PaginatedResponse' } } } } },
+      },
+      post: {
+        tags: ['Equipment'],
+        summary: 'Create equipment (single or batch)',
+        description: 'สร้าง 1 รายการ: ส่ง start ไม่มี end\nสร้างชุด: ส่ง start + end (max 100)\n\nตัวอย่าง numberPrefix="545-36-5436", start=1, end=3\n→ equipmentNumber: 545-36-5436-001, 545-36-5436-002, 545-36-5436-003\n\n**หมายเหตุ:** userUuid ดึงจาก token อัตโนมัติ ไม่ต้องส่งมา',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['equipmentCode', 'numberPrefix', 'start', 'equipmentName'],
+                properties: {
+                  equipmentCode:      { type: 'string', example: '545365436' },
+                  numberPrefix:       { type: 'string', example: '545-36-5436' },
+                  start:              { type: 'integer', example: 1 },
+                  end:                { type: 'integer', example: 3 },
+                  padLength:          { type: 'integer', example: 3, default: 3 },
+                  equipmentName:      { type: 'string', example: 'คอมพิวเตอร์ตั้งโต๊ะ' },
+                  equipmentTypeId:    { type: 'integer' },
+                  departmentId:       { type: 'integer' },
+                  activityId:         { type: 'integer' },
+                  fundId:             { type: 'integer' },
+                  fiscalYear:         { type: 'integer', example: 2568 },
+                  price:              { type: 'number', example: 25000 },
+                  unit:               { type: 'string', example: 'เครื่อง' },
+                  acquisitionSourceId:{ type: 'integer' },
+                  acquisitionMethodId:{ type: 'integer' },
+                  acquisitionDate:    { type: 'string', format: 'date' },
+                  company:            { type: 'string' },
+                  sizeDetail:         { type: 'string' },
+                  buildingId:         { type: 'integer' },
+                  roomId:             { type: 'integer' },
+                  projectId:          { type: 'integer' },
+                  note:               { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': { description: 'Created — returns array of created equipment' },
+          '400': { description: 'Bad request / duplicate equipmentNumber' },
+          '403': { description: 'ไม่มีสิทธิ์สร้างใน department อื่น' },
+        },
+      },
+    },
+    '/api/equipment/stats': {
+      get: { tags: ['Equipment'], summary: 'Get equipment statistics', responses: { '200': { description: 'Success' } } },
+    },
+    '/api/equipment/code/{code}': {
+      get: { tags: ['Equipment'], summary: 'Get equipment by equipmentCode', parameters: [{ name: 'code', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'Success' }, '403': { description: 'ไม่มีสิทธิ์' }, '404': { description: 'Not found' } } },
+    },
+    '/api/equipment/{uuid}': {
+      get: {
+        tags: ['Equipment'],
+        summary: 'Get equipment by UUID',
+        parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        responses: { '200': { description: 'Success' }, '403': { description: 'ไม่มีสิทธิ์' }, '404': { description: 'Not found' } },
+      },
+      put: {
+        tags: ['Equipment'],
+        summary: 'Update equipment',
+        parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } },
+        responses: { '200': { description: 'Updated' }, '403': { description: 'ไม่มีสิทธิ์' }, '404': { description: 'Not found' } },
+      },
+      delete: {
+        tags: ['Equipment'],
+        summary: 'Delete equipment (soft delete)',
+        parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        responses: { '200': { description: 'Deleted' }, '403': { description: 'ไม่มีสิทธิ์' }, '404': { description: 'Not found' } },
+      },
+    },
+    '/api/equipment/{uuid}/attachments': {
+      post: {
+        tags: ['Equipment'],
+        summary: 'Upload attachment(s) to equipment',
+        description: 'รองรับทั้งไฟล์เดียว (field: `file`) และหลายไฟล์พร้อมกัน (field: `files`)\nรองรับ: jpg, png, webp · ขนาดสูงสุด 10 MB',
+        parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                properties: {
+                  file:  { type: 'string', format: 'binary', description: 'ไฟล์เดียว' },
+                  files: { type: 'array', items: { type: 'string', format: 'binary' }, description: 'หลายไฟล์' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': { description: 'Uploaded — returns array of attachment objects' },
+          '400': { description: 'ไม่มีไฟล์ / ประเภทไฟล์ไม่รองรับ' },
+          '404': { description: 'Equipment not found' },
+        },
+      },
+      get: {
+        tags: ['Equipment'],
+        summary: 'Get all attachments of equipment',
+        parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        responses: { '200': { description: 'Success' }, '404': { description: 'Equipment not found' } },
+      },
+    },
+    '/api/equipment/{uuid}/attachments/{attachmentId}': {
+      delete: {
+        tags: ['Equipment'],
+        summary: 'Delete attachment from equipment',
+        parameters: [
+          { name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+          { name: 'attachmentId', in: 'path', required: true, schema: { type: 'integer' } },
+        ],
+        responses: { '200': { description: 'Deleted' }, '404': { description: 'Not found' } },
+      },
+    },
+
+    // ==================== EQUIPMENT STATUS ====================
+
+    '/api/equipment-status/change': {
+      post: {
+        tags: ['Equipment Status'],
+        summary: '⭐ Change equipment status (main endpoint)',
+        description: [
+          'เปลี่ยนสถานะครุภัณฑ์หลายรายการพร้อมกัน',
+          'ระบบจะ: ปิด record เก่า → สร้าง record ใหม่ → อัปเดต status → บันทึก log (transaction)',
+          '**userUuid ดึงจาก token อัตโนมัติ ไม่ต้องส่งมา**',
+          '',
+          '**Blocked transitions:**',
+          '- FROM disposed → ทุกสถานะ (403)',
+          '- TO สถานะเดิม (400)',
+          '',
+          '---',
+          '**normal** — คืนสภาพปกติ:',
+          '```json',
+          '{',
+          '  "equipmentIds": [1, 2, 3],',
+          '  "newStatus": "normal",',
+          '  "data": { "reason": "ซ่อมเสร็จแล้ว" }',
+          '}',
+          '```',
+          '',
+          '**borrowed** — ยืม:',
+          '```json',
+          '{',
+          '  "equipmentIds": [1, 2],',
+          '  "newStatus": "borrowed",',
+          '  "data": {',
+          '    "borrowerName": "สมชาย ใจดี",',
+          '    "borrowDate": "2026-02-25",',
+          '    "borrowerDepartmentId": 3,',
+          '    "expectedReturnDate": "2026-03-10",',
+          '    "reason": "ใช้ในงานสัมมนา"',
+          '  }',
+          '}',
+          '```',
+          '',
+          '**repair** — ส่งซ่อม:',
+          '```json',
+          '{',
+          '  "equipmentIds": [1],',
+          '  "newStatus": "repair",',
+          '  "data": {',
+          '    "repairReason": "จอแตก",',
+          '    "startDate": "2026-02-25",',
+          '    "repairCompany": "บริษัทซ่อมดี",',
+          '    "cost": 3500,',
+          '    "endDate": "2026-03-10",',
+          '    "attachmentId": 5',
+          '  }',
+          '}',
+          '```',
+          '',
+          '**unavailable** — ไม่สามารถใช้งานได้:',
+          '```json',
+          '{',
+          '  "equipmentIds": [1],',
+          '  "newStatus": "unavailable",',
+          '  "data": { "reason": "ชำรุดรอการพิจารณาจำหน่าย" }',
+          '}',
+          '```',
+          '',
+          '**disposed** — จำหน่าย:',
+          '```json',
+          '{',
+          '  "equipmentIds": [1],',
+          '  "newStatus": "disposed",',
+          '  "data": {',
+          '    "disposalDate": "2026-02-25",',
+          '    "disposalMethod": "ขายทอดตลาด",',
+          '    "approvedBy": "ผศ.ดร.สมศักดิ์",',
+          '    "cost": 500,',
+          '    "reason": "หมดอายุการใช้งาน",',
+          '    "attachmentId": 6',
+          '  }',
+          '}',
+          '```',
+        ].join('\n'),
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['equipmentIds', 'newStatus'],
+                properties: {
+                  equipmentIds: { type: 'array', items: { type: 'integer' }, example: [1, 2, 3] },
+                  newStatus: { type: 'string', enum: ['normal', 'borrowed', 'repair', 'unavailable', 'disposed'] },
+                  data: {
+                    type: 'object',
+                    properties: {
+                      reason:              { type: 'string', description: 'normal / unavailable' },
+                      borrowerName:        { type: 'string', description: '* borrowed' },
+                      borrowerDepartmentId:{ type: 'integer' },
+                      borrowDate:          { type: 'string', format: 'date', description: '* borrowed' },
+                      expectedReturnDate:  { type: 'string', format: 'date' },
+                      repairReason:        { type: 'string', description: '* repair' },
+                      repairCompany:       { type: 'string' },
+                      cost:                { type: 'number' },
+                      startDate:           { type: 'string', format: 'date', description: '* repair' },
+                      endDate:             { type: 'string', format: 'date', description: 'วันคาดการณ์ซ่อมเสร็จ' },
+                      attachmentId:        { type: 'integer', description: 'repair / disposed — จาก POST /api/attachments/upload' },
+                      disposalDate:        { type: 'string', format: 'date', description: '* disposed' },
+                      disposalMethod:      { type: 'string' },
+                      approvedBy:          { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': { description: 'Changed successfully' },
+          '400': { description: 'Validation error / same status / blocked transition' },
+          '403': { description: 'ไม่มีสิทธิ์เปลี่ยนสถานะ department อื่น' },
+        },
+      },
+    },
+
+    '/api/equipment-status/normals': {
+      get: { tags: ['Equipment Status'], summary: 'Get all normal records', responses: { '200': { description: 'Success' } } },
+    },
+    '/api/equipment-status/normals/{id}': {
+      get:    { tags: ['Equipment Status'], summary: 'Get normal by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
+      put:    { tags: ['Equipment Status'], summary: 'Update normal',    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' } } },
+      delete: { tags: ['Equipment Status'], summary: 'Delete normal',    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' } } },
+    },
+    '/api/equipment-status/normals/equipment/{equipmentId}': {
+      get: { tags: ['Equipment Status'], summary: 'Get normals by equipment', parameters: [{ name: 'equipmentId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
+    },
+    '/api/equipment-status/borrows': {
+      get: { tags: ['Equipment Status'], summary: 'Get all borrow records', responses: { '200': { description: 'Success' } } },
+    },
+    '/api/equipment-status/borrows/{id}': {
+      get:    { tags: ['Equipment Status'], summary: 'Get borrow by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
+      put:    { tags: ['Equipment Status'], summary: 'Update borrow',    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' } } },
+      delete: { tags: ['Equipment Status'], summary: 'Delete borrow',    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' } } },
+    },
+    '/api/equipment-status/borrows/equipment/{equipmentId}': {
+      get: { tags: ['Equipment Status'], summary: 'Get borrows by equipment', parameters: [{ name: 'equipmentId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
+    },
+    '/api/equipment-status/repairs': {
+      get: { tags: ['Equipment Status'], summary: 'Get all repair records', responses: { '200': { description: 'Success' } } },
+    },
+    '/api/equipment-status/repairs/{id}': {
+      get: { tags: ['Equipment Status'], summary: 'Get repair by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
+      put: {
+        tags: ['Equipment Status'],
+        summary: 'Update repair',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  repairReason:  { type: 'string' },
+                  repairCompany: { type: 'string' },
+                  cost:          { type: 'number' },
+                  startDate:     { type: 'string', format: 'date' },
+                  endDate:       { type: 'string', format: 'date', description: 'วันคาดการณ์ซ่อมเสร็จ' },
+                  actualEndDate: { type: 'string', format: 'date', description: 'วันที่ซ่อมเสร็จจริง' },
+                  attachmentId:  { type: 'integer' },
+                },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'Updated' } },
+      },
+      delete: { tags: ['Equipment Status'], summary: 'Delete repair', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' } } },
+    },
+    '/api/equipment-status/repairs/equipment/{equipmentId}': {
+      get: { tags: ['Equipment Status'], summary: 'Get repairs by equipment', parameters: [{ name: 'equipmentId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
+    },
+    '/api/equipment-status/unavailable': {
+      get: { tags: ['Equipment Status'], summary: 'Get all unavailable records', responses: { '200': { description: 'Success' } } },
+    },
+    '/api/equipment-status/unavailable/{id}': {
+      get:    { tags: ['Equipment Status'], summary: 'Get unavailable by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
+      put:    { tags: ['Equipment Status'], summary: 'Update unavailable',    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' } } },
+      delete: { tags: ['Equipment Status'], summary: 'Delete unavailable',    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' } } },
+    },
+    '/api/equipment-status/unavailable/equipment/{equipmentId}': {
+      get: { tags: ['Equipment Status'], summary: 'Get unavailable by equipment', parameters: [{ name: 'equipmentId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
+    },
+    '/api/equipment-status/disposals': {
+      get: { tags: ['Equipment Status'], summary: 'Get all disposal records', responses: { '200': { description: 'Success' } } },
+    },
+    '/api/equipment-status/disposals/{id}': {
+      get:    { tags: ['Equipment Status'], summary: 'Get disposal by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
+      put:    { tags: ['Equipment Status'], summary: 'Update disposal',    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' } } },
+      delete: { tags: ['Equipment Status'], summary: 'Delete disposal',    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' } } },
+    },
+    '/api/equipment-status/disposals/equipment/{equipmentId}': {
+      get: { tags: ['Equipment Status'], summary: 'Get disposals by equipment', parameters: [{ name: 'equipmentId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
+    },
+    '/api/equipment-status/logs': {
+      get: { tags: ['Equipment Status'], summary: 'Get all status logs', responses: { '200': { description: 'Success' } } },
+    },
+    '/api/equipment-status/logs/equipment/{equipmentId}': {
+      get: { tags: ['Equipment Status'], summary: 'Get status logs by equipment (timeline)', parameters: [{ name: 'equipmentId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
+    },
+
+    // ==================== ATTACHMENTS ====================
+
+    '/api/attachments/upload': {
+      post: {
+        tags: ['Attachments'],
+        summary: '⭐ Upload file (สำหรับ repair / disposal / mhesi)',
+        description: 'อัปโหลดไฟล์ → ได้ attachmentId กลับมา → เอาไปใส่ใน body ของ changeStatus หรือ mhesi\n\n**รองรับ:** jpg, png, webp · ขนาดสูงสุด 10 MB\n\n**สำหรับ equipment:** ใช้ `POST /api/equipment/:uuid/attachments` แทน',
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                required: ['file'],
+                properties: {
+                  file:   { type: 'string', format: 'binary' },
+                  folder: { type: 'string', enum: ['repair', 'disposal', 'mhesi', 'general'], default: 'general' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Uploaded',
+            content: {
+              'application/json': {
+                example: { success: true, data: { id: 5, fileName: 'doc.jpg', filePath: '/uploads/repair/2026/03/uuid.jpg', fileType: 'image/jpeg' } },
+              },
+            },
+          },
+          '400': { description: 'ไม่มีไฟล์ / ประเภทไม่รองรับ / ขนาดเกิน' },
+        },
+      },
+    },
+    '/api/attachments': {
+      get: { tags: ['Attachments'], summary: 'Get all attachments', responses: { '200': { description: 'Success' } } },
+    },
+    '/api/attachments/{id}': {
+      get:    { tags: ['Attachments'], summary: 'Get attachment by ID',       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
+      put:    { tags: ['Attachments'], summary: 'Update attachment metadata', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' } } },
+      delete: { tags: ['Attachments'], summary: 'Delete attachment (ลบไฟล์ + record)', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' }, '404': { description: 'Not found' } } },
     },
 
     // ==================== PROJECTS ====================
@@ -158,13 +561,13 @@ export const swaggerConfig = {
                 type: 'object',
                 required: ['projectName'],
                 properties: {
-                  projectName: { type: 'string' },
-                  projectTypeId: { type: 'integer' },
-                  projectDate: { type: 'string', format: 'date' },
-                  budget: { type: 'number' },
-                  status: { type: 'string' },
-                  acquisitionSourceId: { type: 'integer' },
-                  note: { type: 'string' },
+                  projectName:        { type: 'string' },
+                  projectTypeId:      { type: 'integer' },
+                  projectDate:        { type: 'string', format: 'date' },
+                  budget:             { type: 'number' },
+                  status:             { type: 'string' },
+                  acquisitionSourceId:{ type: 'integer' },
+                  note:               { type: 'string' },
                 },
               },
             },
@@ -177,8 +580,8 @@ export const swaggerConfig = {
       get: { tags: ['Projects'], summary: 'Get project statistics', responses: { '200': { description: 'Success' } } },
     },
     '/api/projects/{id}': {
-      get: { tags: ['Projects'], summary: 'Get project by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
-      put: { tags: ['Projects'], summary: 'Update project', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' }, '404': { description: 'Not found' } } },
+      get:    { tags: ['Projects'], summary: 'Get project by ID',      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
+      put:    { tags: ['Projects'], summary: 'Update project',         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' }, '404': { description: 'Not found' } } },
       delete: { tags: ['Projects'], summary: 'Delete project (soft delete)', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' }, '404': { description: 'Not found' } } },
     },
 
@@ -189,7 +592,7 @@ export const swaggerConfig = {
         tags: ['MHESI'],
         summary: 'Get all MHESI numbers',
         parameters: [
-          { name: 'search', in: 'query', schema: { type: 'string' }, description: 'Search by mhesiNumber or activityName' },
+          { name: 'search', in: 'query', schema: { type: 'string' }, description: 'ค้นหา mhesiNumber หรือ activityName' },
           { name: 'projectId', in: 'query', schema: { type: 'integer' } },
           { name: 'departmentId', in: 'query', schema: { type: 'integer' } },
         ],
@@ -206,16 +609,16 @@ export const swaggerConfig = {
                 type: 'object',
                 required: ['mhesiNumber'],
                 properties: {
-                  mhesiNumber: { type: 'string', maxLength: 16 },
+                  mhesiNumber:  { type: 'string', maxLength: 16 },
                   departmentId: { type: 'integer' },
-                  supportUnitId: { type: 'integer' },
-                  planId: { type: 'integer' },
-                  projectId: { type: 'integer' },
+                  supportUnitId:{ type: 'integer' },
+                  planId:       { type: 'integer' },
+                  projectId:    { type: 'integer' },
                   activityName: { type: 'string' },
-                  date: { type: 'string', format: 'date' },
-                  amount: { type: 'number' },
-                  note: { type: 'string' },
-                  attachmentId: { type: 'integer' },
+                  date:         { type: 'string', format: 'date' },
+                  amount:       { type: 'number' },
+                  note:         { type: 'string' },
+                  attachmentId: { type: 'integer', description: 'จาก POST /api/attachments/upload' },
                 },
               },
             },
@@ -225,293 +628,81 @@ export const swaggerConfig = {
       },
     },
     '/api/mhesi/{id}': {
-      get: { tags: ['MHESI'], summary: 'Get MHESI number by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
-      put: { tags: ['MHESI'], summary: 'Update MHESI number', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' }, '404': { description: 'Not found' } } },
-      delete: { tags: ['MHESI'], summary: 'Delete MHESI number (soft delete)', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' }, '404': { description: 'Not found' } } },
+      get:    { tags: ['MHESI'], summary: 'Get MHESI by ID',        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
+      put:    { tags: ['MHESI'], summary: 'Update MHESI',           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' }, '404': { description: 'Not found' } } },
+      delete: { tags: ['MHESI'], summary: 'Delete MHESI (soft delete)', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' }, '404': { description: 'Not found' } } },
     },
     '/api/mhesi/project/{projectId}': {
-      get: { tags: ['MHESI'], summary: 'Get MHESI numbers by project', parameters: [{ name: 'projectId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
+      get: { tags: ['MHESI'], summary: 'Get MHESI by project', parameters: [{ name: 'projectId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
     },
 
-    // ==================== EQUIPMENT ====================
+    // ==================== REPORTS ====================
 
-    '/api/equipment': {
+    '/api/reports/depreciation': {
       get: {
-        tags: ['Equipment'],
-        summary: 'Get all equipment',
+        tags: ['Reports'],
+        summary: 'คำนวณค่าเสื่อมราคาครุภัณฑ์',
+        description: [
+          'คำนวณค่าเสื่อมราคาแบบ Straight-Line ในช่วงวันที่ที่กำหนด',
+          'รองรับหลายปีงบประมาณ เช่น 2024-10-01 ถึง 2027-09-30',
+          'ใช้ query 1 ครั้ง — คำนวณ + สรุปในหน่วยความจำ',
+          '',
+          '**Permission:**',
+          '- Admin/dept.1: กรอง departmentId ได้อิสระ',
+          '- User ทั่วไป: ดูได้แค่ department ตัวเอง (ส่ง departmentId ของคนอื่น → 403)',
+          '',
+          '**Response:**',
+          '```json',
+          '{',
+          '  "data": {',
+          '    "details": [{',
+          '      "equipmentNumber": "545-36-5436-001",',
+          '      "equipmentName": "โต๊ะ",',
+          '      "acquisitionDate": "2014-03-29",',
+          '      "usefulAge": 11.42,',
+          '      "usefulLife": 8,',
+          '      "price": 5000,',
+          '      "acquisitionSource": "งปม",',
+          '      "depreciationPerYear": 625,',
+          '      "accumulatedBefore": 4999,',
+          '      "depreciationThisYear": 0,',
+          '      "accumulatedAfter": 4999,',
+          '      "bookValueStart": 1,',
+          '      "bookValueEnd": 1,',
+          '      "departmentName": "ส่วนบริหารงานทั่วไป"',
+          '    }],',
+          '    "summary": {',
+          '      "totalItems": 1,',
+          '      "periodStart": "2024-10-01",',
+          '      "periodEnd": "2025-09-30",',
+          '      "totalPrice": 5000,',
+          '      "totalDepreciationPerYear": 625,',
+          '      "totalAccumulatedBefore": 4999,',
+          '      "totalDepreciationThisYear": 0,',
+          '      "totalAccumulatedAfter": 4999,',
+          '      "totalBookValueStart": 1,',
+          '      "totalBookValueEnd": 1',
+          '    }',
+          '  }',
+          '}',
+          '```',
+        ].join('\n'),
         parameters: [
-          { name: 'search', in: 'query', schema: { type: 'string' } },
-          { name: 'status', in: 'query', schema: { type: 'string', enum: ['normal', 'borrowed', 'repair', 'unavailable', 'disposed'] } },
-          { name: 'departmentId', in: 'query', schema: { type: 'integer' } },
-          { name: 'equipmentTypeId', in: 'query', schema: { type: 'integer' } },
-          { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } },
-          { name: 'limit', in: 'query', schema: { type: 'integer', default: 10 } },
+          { name: 'startDate', in: 'query', required: true, schema: { type: 'string', format: 'date' }, description: 'วันเริ่มต้น เช่น 2024-10-01' },
+          { name: 'endDate',   in: 'query', required: true, schema: { type: 'string', format: 'date' }, description: 'วันสิ้นสุด เช่น 2025-09-30' },
+          { name: 'departmentId',       in: 'query', schema: { type: 'integer' }, description: 'admin/dept.1 เท่านั้น' },
+          { name: 'fundId',             in: 'query', schema: { type: 'integer' } },
+          { name: 'equipmentTypeId',    in: 'query', schema: { type: 'integer' } },
+          { name: 'acquisitionMethodId',in: 'query', schema: { type: 'integer' } },
+          { name: 'acquisitionSourceId',in: 'query', schema: { type: 'integer' } },
+          { name: 'minPrice',           in: 'query', schema: { type: 'number' }, description: 'มูลค่าต่ำสุด' },
         ],
-        responses: { '200': { description: 'Success', content: { 'application/json': { schema: { $ref: '#/components/schemas/PaginatedResponse' } } } } },
-      },
-      post: {
-        tags: ['Equipment'],
-        summary: 'Create equipment (single or batch)',
-        description: [
-          'สร้าง 1 รายการ: ส่ง start ไม่มี end',
-          'สร้างชุด: ส่ง start + end (max 100)',
-          '',
-          'ตัวอย่าง numberPrefix="545-36-5436", start=1, end=3',
-          '→ equipmentNumber: 545-36-5436-001, 545-36-5436-002, 545-36-5436-003',
-        ].join('\n'),
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                required: ['equipmentCode', 'numberPrefix', 'start', 'equipmentName', 'userUuid'],
-                properties: {
-                  equipmentCode: { type: 'string', example: '545365436', description: 'รหัสครุภัณฑ์' },
-                  userUuid: { type: 'string', format: 'uuid', description: 'UUID ของผู้ใช้ที่สร้าง' },
-                  numberPrefix: { type: 'string', example: '545-36-5436', description: 'prefix สำหรับ equipmentNumber' },
-                  start: { type: 'integer', example: 1, description: 'ลำดับเริ่มต้น' },
-                  end: { type: 'integer', example: 3, description: 'ลำดับสิ้นสุด (ไม่ส่ง = สร้างแค่ start รายการเดียว)' },
-                  padLength: { type: 'integer', example: 3, default: 3, description: 'ความยาว padding (default 3)' },
-                  equipmentName: { type: 'string' },
-                  equipmentTypeId: { type: 'integer' },
-                  departmentId: { type: 'integer' },
-                  activityId: { type: 'integer' },
-                  fundId: { type: 'integer' },
-                  fiscalYear: { type: 'integer' },
-                  price: { type: 'number' },
-                  unit: { type: 'string', example: 'เครื่อง' },
-                  acquisitionSourceId: { type: 'integer' },
-                  acquisitionMethodId: { type: 'integer' },
-                  acquisitionDate: { type: 'string', format: 'date' },
-                  company: { type: 'string' },
-                  sizeDetail: { type: 'string' },
-                  buildingId: { type: 'integer' },
-                  roomId: { type: 'integer' },
-                  projectId: { type: 'integer' },
-                  status: { type: 'string', enum: ['normal', 'borrowed', 'repair', 'unavailable', 'disposed'], default: 'normal' },
-                  note: { type: 'string' },
-                },
-              },
-            },
-          },
-        },
         responses: {
-          '201': { description: 'Created — returns array of created equipment' },
-          '400': { description: 'Bad request / duplicate equipmentNumber', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '200': { description: 'Success — returns { details[], summary }' },
+          '400': { description: 'startDate หรือ endDate is required' },
+          '403': { description: 'ไม่มีสิทธิ์ดูข้อมูล department อื่น' },
         },
       },
-    },
-    '/api/equipment/stats': {
-      get: { tags: ['Equipment'], summary: 'Get equipment statistics', responses: { '200': { description: 'Success' } } },
-    },
-    '/api/equipment/code/{code}': {
-      get: { tags: ['Equipment'], summary: 'Get equipment by code', parameters: [{ name: 'code', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
-    },
-    '/api/equipment/{id}': {
-      get: { tags: ['Equipment'], summary: 'Get equipment by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
-      put: { tags: ['Equipment'], summary: 'Update equipment', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' }, '404': { description: 'Not found' } } },
-      delete: { tags: ['Equipment'], summary: 'Delete equipment (soft delete)', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' }, '404': { description: 'Not found' } } },
-    },
-
-    // ==================== EQUIPMENT STATUS ====================
-
-    // Change Status — เส้นหลักสำหรับเปลี่ยนสถานะ
-    '/api/equipment-status/change': {
-      post: {
-        tags: ['Equipment Status'],
-        summary: '⭐ Change equipment status (main endpoint)',
-        description: [
-          'เปลี่ยนสถานะครุภัณฑ์หลายรายการพร้อมกัน',
-          'ระบบจะ: ปิด record เก่า → สร้าง record ใหม่ → อัปเดต status → บันทึก log',
-          'ทุกอย่างทำใน transaction เดียว ถ้า error จะ rollback ทั้งหมด',
-          '',
-          'field บังคับใน data ตาม newStatus:',
-          '- normal     : ไม่มี',
-          '- borrowed   : borrowerName, borrowDate',
-          '- repair     : repairReason, startDate',
-          '- unavailable: reason',
-          '- disposed   : disposalDate',
-        ].join('\n'),
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                required: ['equipmentIds', 'newStatus', 'userUuid'],
-                properties: {
-                  equipmentIds: {
-                    type: 'array',
-                    items: { type: 'integer' },
-                    example: [1, 2, 3],
-                    description: 'ID ครุภัณฑ์ที่ต้องการเปลี่ยนสถานะ',
-                  },
-                  newStatus: {
-                    type: 'string',
-                    enum: ['normal', 'borrowed', 'repair', 'unavailable', 'disposed'],
-                  },
-                  data: {
-                    type: 'object',
-                    description: 'ข้อมูลตามสถานะ',
-                    properties: {
-                      reason: { type: 'string', description: 'เหตุผล (normal / unavailable)' },
-                      borrowerName: { type: 'string' },
-                      borrowerDepartmentId: { type: 'integer' },
-                      borrowDate: { type: 'string', format: 'date' },
-                      expectedReturnDate: { type: 'string', format: 'date' },
-                      repairReason: { type: 'string' },
-                      repairCompany: { type: 'string' },
-                      cost: { type: 'number' },
-                      startDate: { type: 'string', format: 'date' },
-                      endDate: { type: 'string', format: 'date', description: 'วันคาดการณ์ซ่อมเสร็จ' },
-                      attachmentId: { type: 'integer' },
-                      disposalDate: { type: 'string', format: 'date' },
-                      disposalMethod: { type: 'string' },
-                      approvedBy: { type: 'string' },
-                      remark: { type: 'string', description: 'หมายเหตุใน log' },
-                    },
-                  },
-                  userUuid: { type: 'string', format: 'uuid' },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          '200': { description: 'Changed successfully' },
-          '400': { description: 'Validation error / blocked transition', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-        },
-      },
-    },
-
-    // Normals — GET / PUT / DELETE เท่านั้น
-    '/api/equipment-status/normals': {
-      get: { tags: ['Equipment Status'], summary: 'Get all normal records', responses: { '200': { description: 'Success' } } },
-    },
-    '/api/equipment-status/normals/{id}': {
-      get: { tags: ['Equipment Status'], summary: 'Get normal record by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
-      put: { tags: ['Equipment Status'], summary: 'Update normal record', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' } } },
-      delete: { tags: ['Equipment Status'], summary: 'Delete normal record', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' } } },
-    },
-    '/api/equipment-status/normals/equipment/{equipmentId}': {
-      get: { tags: ['Equipment Status'], summary: 'Get normal records by equipment', parameters: [{ name: 'equipmentId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
-    },
-
-    // Borrows — GET / PUT / DELETE เท่านั้น
-    '/api/equipment-status/borrows': {
-      get: { tags: ['Equipment Status'], summary: 'Get all borrow records', responses: { '200': { description: 'Success' } } },
-    },
-    '/api/equipment-status/borrows/{id}': {
-      get: { tags: ['Equipment Status'], summary: 'Get borrow by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
-      put: { tags: ['Equipment Status'], summary: 'Update borrow', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' } } },
-      delete: { tags: ['Equipment Status'], summary: 'Delete borrow', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' } } },
-    },
-    '/api/equipment-status/borrows/equipment/{equipmentId}': {
-      get: { tags: ['Equipment Status'], summary: 'Get borrows by equipment', parameters: [{ name: 'equipmentId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
-    },
-
-    // Repairs — GET / PUT / DELETE เท่านั้น
-    '/api/equipment-status/repairs': {
-      get: { tags: ['Equipment Status'], summary: 'Get all repair records', responses: { '200': { description: 'Success' } } },
-    },
-    '/api/equipment-status/repairs/{id}': {
-      get: { tags: ['Equipment Status'], summary: 'Get repair by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
-      put: {
-        tags: ['Equipment Status'],
-        summary: 'Update repair',
-        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                properties: {
-                  repairReason: { type: 'string' },
-                  repairCompany: { type: 'string' },
-                  cost: { type: 'number' },
-                  startDate: { type: 'string', format: 'date' },
-                  endDate: { type: 'string', format: 'date', description: 'วันคาดการณ์ซ่อมเสร็จ' },
-                  actualEndDate: { type: 'string', format: 'date', description: 'วันที่ซ่อมเสร็จจริง' },
-                  attachmentId: { type: 'integer' },
-                },
-              },
-            },
-          },
-        },
-        responses: { '200': { description: 'Updated' } },
-      },
-      delete: { tags: ['Equipment Status'], summary: 'Delete repair', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' } } },
-    },
-    '/api/equipment-status/repairs/equipment/{equipmentId}': {
-      get: { tags: ['Equipment Status'], summary: 'Get repairs by equipment', parameters: [{ name: 'equipmentId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
-    },
-
-    // Unavailable — GET / PUT / DELETE เท่านั้น
-    '/api/equipment-status/unavailable': {
-      get: { tags: ['Equipment Status'], summary: 'Get all unavailable records', responses: { '200': { description: 'Success' } } },
-    },
-    '/api/equipment-status/unavailable/{id}': {
-      get: { tags: ['Equipment Status'], summary: 'Get unavailable by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
-      put: { tags: ['Equipment Status'], summary: 'Update unavailable', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' } } },
-      delete: { tags: ['Equipment Status'], summary: 'Delete unavailable', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' } } },
-    },
-    '/api/equipment-status/unavailable/equipment/{equipmentId}': {
-      get: { tags: ['Equipment Status'], summary: 'Get unavailable records by equipment', parameters: [{ name: 'equipmentId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
-    },
-
-    // Disposals — GET / PUT / DELETE เท่านั้น
-    '/api/equipment-status/disposals': {
-      get: { tags: ['Equipment Status'], summary: 'Get all disposal records', responses: { '200': { description: 'Success' } } },
-    },
-    '/api/equipment-status/disposals/{id}': {
-      get: { tags: ['Equipment Status'], summary: 'Get disposal by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
-      put: { tags: ['Equipment Status'], summary: 'Update disposal', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' } } },
-      delete: { tags: ['Equipment Status'], summary: 'Delete disposal', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' } } },
-    },
-    '/api/equipment-status/disposals/equipment/{equipmentId}': {
-      get: { tags: ['Equipment Status'], summary: 'Get disposals by equipment', parameters: [{ name: 'equipmentId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
-    },
-
-    // Status Logs — GET เท่านั้น (สร้างอัตโนมัติผ่าน /change)
-    '/api/equipment-status/logs': {
-      get: { tags: ['Equipment Status'], summary: 'Get all status logs', responses: { '200': { description: 'Success' } } },
-    },
-    '/api/equipment-status/logs/equipment/{equipmentId}': {
-      get: { tags: ['Equipment Status'], summary: 'Get status logs by equipment (timeline)', parameters: [{ name: 'equipmentId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
-    },
-
-    // ==================== ATTACHMENTS ====================
-
-    '/api/attachments': {
-      get: { tags: ['Attachments'], summary: 'Get all attachments', responses: { '200': { description: 'Success' } } },
-      post: {
-        tags: ['Attachments'],
-        summary: 'Create attachment',
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                required: ['fileName', 'filePath'],
-                properties: {
-                  fileName: { type: 'string' },
-                  filePath: { type: 'string' },
-                  fileType: { type: 'string' },
-                },
-              },
-            },
-          },
-        },
-        responses: { '201': { description: 'Created' } },
-      },
-    },
-    '/api/attachments/{id}': {
-      get: { tags: ['Attachments'], summary: 'Get attachment by ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
-      put: { tags: ['Attachments'], summary: 'Update attachment', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' } } },
-      delete: { tags: ['Attachments'], summary: 'Delete attachment', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' } } },
     },
 
     // ==================== HEALTH ====================
@@ -525,14 +716,7 @@ export const swaggerConfig = {
             description: 'Service is healthy',
             content: {
               'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    status: { type: 'string', example: 'ok' },
-                    timestamp: { type: 'string', format: 'date-time' },
-                    environment: { type: 'string' },
-                  },
-                },
+                example: { status: 'ok', timestamp: '2026-03-02T00:00:00.000Z', environment: 'development' },
               },
             },
           },

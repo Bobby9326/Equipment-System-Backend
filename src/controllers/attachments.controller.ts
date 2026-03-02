@@ -24,11 +24,13 @@ export const attachmentsController = {
     }
   },
 
-  // GET /api/equipment/:id/attachments (เรียกผ่าน equipment.routes.ts)
+  // GET /api/equipment/:uuid/attachments (เรียกผ่าน equipment.routes.ts)
   getByEquipmentId: async (c: Context) => {
     try {
-      const equipmentId = parseInt(c.req.param('id'));
-      const data = await attachmentsService.getByEquipmentId(equipmentId);
+      const uuid = c.req.param('uuid')
+      const equipment = await equipmentService.getByUuid(uuid)
+      if (!equipment) return errorResponse(c, 'Equipment not found', 404)
+      const data = await attachmentsService.getByEquipmentId(equipment.id)
       return successResponse(c, data, 'Attachments retrieved successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
@@ -54,7 +56,7 @@ export const attachmentsController = {
     }
   },
 
-  // POST /api/equipment/:id/attachments (เรียกผ่าน equipment.routes.ts)
+  // POST /api/equipment/:uuid/attachments (เรียกผ่าน equipment.routes.ts)
   // multipart/form-data: files[] (หลายไฟล์) หรือ file (ไฟล์เดียว)
   uploadForEquipment: async (c: Context) => {
     try {
@@ -123,12 +125,22 @@ export const attachmentsController = {
     }
   },
 
-  // DELETE /api/equipment/:id/attachments/:attachmentId
+  // DELETE /api/equipment/:uuid/attachments/:attachmentId
   deleteById: async (c: Context) => {
     try {
-      const id   = parseInt(c.req.param('attachmentId'));
-      const data = await attachmentsService.delete(id);
-      if (!data) return errorResponse(c, 'Attachment not found', 404);
+      const uuid         = c.req.param('uuid');
+      const attachmentId = parseInt(c.req.param('attachmentId'));
+
+      // ตรวจว่า equipment มีอยู่จริง
+      const equip = await equipmentService.getByUuid(uuid);
+      if (!equip) return errorResponse(c, 'Equipment not found', 404);
+
+      // ตรวจว่า attachment นี้เป็นของ equipment นี้จริง
+      const attachments = await attachmentsService.getByEquipmentId(equip.id);
+      const exists = attachments.some(a => a.id === attachmentId);
+      if (!exists) return errorResponse(c, 'Attachment not found', 404);
+
+      const data = await attachmentsService.delete(attachmentId);
       return successResponse(c, null, 'Attachment deleted successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
