@@ -81,7 +81,19 @@ export const swaggerConfig = {
             description: 'Success',
             content: {
               'application/json': {
-                example: { success: true, data: { uuid: '3fa85f64-5717-4562-b3fc-2c963f66afa6', role: 'user', departmentId: 2 } },
+                example: {
+                  success: true,
+                  data: {
+                    uuid:           '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+                    email:          'somchai@kmitl.ac.th',
+                    firstName:      'สมชาย',
+                    lastName:       'ใจดี',
+                    role:           'user',
+                    departmentId:   2,
+                    departmentName: 'ส่วนบริหารงานทั่วไป',
+                    createdAt:      '2026-01-01T00:00:00.000Z',
+                  },
+                },
               },
             },
           },
@@ -219,6 +231,34 @@ export const swaggerConfig = {
     '/api/equipment/code/{code}': {
       get: { tags: ['Equipment'], summary: 'Get equipment by equipmentCode', parameters: [{ name: 'code', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'Success' }, '403': { description: 'ไม่มีสิทธิ์' }, '404': { description: 'Not found' } } },
     },
+    '/api/equipment/{uuid}/history': {
+      get: {
+        tags: ['Equipment'],
+        summary: 'Get equipment history (timeline)',
+        description: 'ดึงประวัติการเปลี่ยนสถานะของครุภัณฑ์ทั้งหมด ไม่ว่าใครจะเป็นคนแก้\nเรียงจากล่าสุดไปเก่าสุด',
+        parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        responses: {
+          '200': {
+            description: 'Success',
+            content: {
+              'application/json': {
+                example: {
+                  success: true,
+                  data: [
+                    { id: 3, status: 'normal',   remark: 'นำมาคืนเรียบร้อย',       createdAt: '2024-03-16T09:30:00.000Z', createdBy: 'ธีรพล ใจดี' },
+                    { id: 2, status: 'borrowed', remark: 'ภาคเมดีดำเนินการยืม',    createdAt: '2024-03-15T15:05:00.000Z', createdBy: 'ธีรพล ใจดี' },
+                    { id: 1, status: 'normal',   remark: 'ลงทะเบียน',              createdAt: '2024-03-15T10:00:00.000Z', createdBy: 'ธีรพล ใจดี' },
+                  ],
+                },
+              },
+            },
+          },
+          '403': { description: 'ไม่มีสิทธิ์' },
+          '404': { description: 'Equipment not found' },
+        },
+      },
+    },
+
     '/api/equipment/{uuid}': {
       get: {
         tags: ['Equipment'],
@@ -304,7 +344,7 @@ export const swaggerConfig = {
           '**normal** — คืนสภาพปกติ:',
           '```json',
           '{',
-          '  "equipmentIds": [1, 2, 3],',
+          '  "equipmentUuids": ["3fa85f64-...", "b1c2d3e4-...", "c5d6e7f8-..."],',
           '  "newStatus": "normal",',
           '  "data": { "reason": "ซ่อมเสร็จแล้ว" }',
           '}',
@@ -313,7 +353,7 @@ export const swaggerConfig = {
           '**borrowed** — ยืม:',
           '```json',
           '{',
-          '  "equipmentIds": [1, 2],',
+          '  "equipmentUuids": ["3fa85f64-...", "b1c2d3e4-..."],',
           '  "newStatus": "borrowed",',
           '  "data": {',
           '    "borrowerName": "สมชาย ใจดี",',
@@ -328,7 +368,7 @@ export const swaggerConfig = {
           '**repair** — ส่งซ่อม:',
           '```json',
           '{',
-          '  "equipmentIds": [1],',
+          '  "equipmentUuids": ["3fa85f64-..."],',
           '  "newStatus": "repair",',
           '  "data": {',
           '    "repairReason": "จอแตก",',
@@ -344,7 +384,7 @@ export const swaggerConfig = {
           '**unavailable** — ไม่สามารถใช้งานได้:',
           '```json',
           '{',
-          '  "equipmentIds": [1],',
+          '  "equipmentUuids": ["3fa85f64-..."],',
           '  "newStatus": "unavailable",',
           '  "data": { "reason": "ชำรุดรอการพิจารณาจำหน่าย" }',
           '}',
@@ -353,7 +393,7 @@ export const swaggerConfig = {
           '**disposed** — จำหน่าย:',
           '```json',
           '{',
-          '  "equipmentIds": [1],',
+          '  "equipmentUuids": ["3fa85f64-..."],',
           '  "newStatus": "disposed",',
           '  "data": {',
           '    "disposalDate": "2026-02-25",',
@@ -372,9 +412,9 @@ export const swaggerConfig = {
             'application/json': {
               schema: {
                 type: 'object',
-                required: ['equipmentIds', 'newStatus'],
+                required: ['equipmentUuids', 'newStatus'],
                 properties: {
-                  equipmentIds: { type: 'array', items: { type: 'integer' }, example: [1, 2, 3] },
+                  equipmentUuids: { type: 'array', items: { type: 'string', format: 'uuid' }, example: ['3fa85f64-...', 'b1c2d3e4-...'] },
                   newStatus: { type: 'string', enum: ['normal', 'borrowed', 'repair', 'unavailable', 'disposed'] },
                   data: {
                     type: 'object',
@@ -416,8 +456,8 @@ export const swaggerConfig = {
       put:    { tags: ['Equipment Status'], summary: 'Update normal',    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' } } },
       delete: { tags: ['Equipment Status'], summary: 'Delete normal',    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' } } },
     },
-    '/api/equipment-status/normals/equipment/{equipmentId}': {
-      get: { tags: ['Equipment Status'], summary: 'Get normals by equipment', parameters: [{ name: 'equipmentId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
+    '/api/equipment-status/normals/equipment/{uuid}': {
+      get: { tags: ['Equipment Status'], summary: 'Get normals by equipment', parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }], responses: { '200': { description: 'Success' } } },
     },
     '/api/equipment-status/borrows': {
       get: { tags: ['Equipment Status'], summary: 'Get all borrow records', responses: { '200': { description: 'Success' } } },
@@ -427,8 +467,8 @@ export const swaggerConfig = {
       put:    { tags: ['Equipment Status'], summary: 'Update borrow',    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' } } },
       delete: { tags: ['Equipment Status'], summary: 'Delete borrow',    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' } } },
     },
-    '/api/equipment-status/borrows/equipment/{equipmentId}': {
-      get: { tags: ['Equipment Status'], summary: 'Get borrows by equipment', parameters: [{ name: 'equipmentId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
+    '/api/equipment-status/borrows/equipment/{uuid}': {
+      get: { tags: ['Equipment Status'], summary: 'Get borrows by equipment', parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }], responses: { '200': { description: 'Success' } } },
     },
     '/api/equipment-status/repairs': {
       get: { tags: ['Equipment Status'], summary: 'Get all repair records', responses: { '200': { description: 'Success' } } },
@@ -462,8 +502,8 @@ export const swaggerConfig = {
       },
       delete: { tags: ['Equipment Status'], summary: 'Delete repair', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' } } },
     },
-    '/api/equipment-status/repairs/equipment/{equipmentId}': {
-      get: { tags: ['Equipment Status'], summary: 'Get repairs by equipment', parameters: [{ name: 'equipmentId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
+    '/api/equipment-status/repairs/equipment/{uuid}': {
+      get: { tags: ['Equipment Status'], summary: 'Get repairs by equipment', parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }], responses: { '200': { description: 'Success' } } },
     },
     '/api/equipment-status/unavailable': {
       get: { tags: ['Equipment Status'], summary: 'Get all unavailable records', responses: { '200': { description: 'Success' } } },
@@ -473,8 +513,8 @@ export const swaggerConfig = {
       put:    { tags: ['Equipment Status'], summary: 'Update unavailable',    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' } } },
       delete: { tags: ['Equipment Status'], summary: 'Delete unavailable',    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' } } },
     },
-    '/api/equipment-status/unavailable/equipment/{equipmentId}': {
-      get: { tags: ['Equipment Status'], summary: 'Get unavailable by equipment', parameters: [{ name: 'equipmentId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
+    '/api/equipment-status/unavailable/equipment/{uuid}': {
+      get: { tags: ['Equipment Status'], summary: 'Get unavailable by equipment', parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }], responses: { '200': { description: 'Success' } } },
     },
     '/api/equipment-status/disposals': {
       get: { tags: ['Equipment Status'], summary: 'Get all disposal records', responses: { '200': { description: 'Success' } } },
@@ -484,14 +524,14 @@ export const swaggerConfig = {
       put:    { tags: ['Equipment Status'], summary: 'Update disposal',    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' } } },
       delete: { tags: ['Equipment Status'], summary: 'Delete disposal',    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' } } },
     },
-    '/api/equipment-status/disposals/equipment/{equipmentId}': {
-      get: { tags: ['Equipment Status'], summary: 'Get disposals by equipment', parameters: [{ name: 'equipmentId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
+    '/api/equipment-status/disposals/equipment/{uuid}': {
+      get: { tags: ['Equipment Status'], summary: 'Get disposals by equipment', parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }], responses: { '200': { description: 'Success' } } },
     },
     '/api/equipment-status/logs': {
       get: { tags: ['Equipment Status'], summary: 'Get all status logs', responses: { '200': { description: 'Success' } } },
     },
-    '/api/equipment-status/logs/equipment/{equipmentId}': {
-      get: { tags: ['Equipment Status'], summary: 'Get status logs by equipment (timeline)', parameters: [{ name: 'equipmentId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },
+    '/api/equipment-status/logs/equipment/{uuid}': {
+      get: { tags: ['Equipment Status'], summary: 'Get status logs by equipment (timeline)', parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }], responses: { '200': { description: 'Success' } } },
     },
 
     // ==================== ATTACHMENTS ====================

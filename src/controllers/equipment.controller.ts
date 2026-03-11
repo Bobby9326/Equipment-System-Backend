@@ -138,6 +138,25 @@ export const equipmentController = {
     }
   },
 
+  getHistory: async (c: Context) => {
+    try {
+      const user = c.get('user');
+      const uuid = c.req.param('uuid');
+
+      const equipment = await equipmentService.getByUuid(uuid);
+      if (!equipment) return errorResponse(c, 'Equipment not found', 404);
+
+      if (!isAdminOrManager(user) && equipment.departmentId !== user.departmentId) {
+        return errorResponse(c, 'ไม่มีสิทธิ์เข้าถึงครุภัณฑ์นี้', 403);
+      }
+
+      const data = await equipmentService.getHistory(uuid);
+      return successResponse(c, data, 'Equipment history retrieved successfully');
+    } catch (error: any) {
+      return errorResponse(c, error.message, 500);
+    }
+  },
+
   getStats: async (c: Context) => {
     try {
       const user = c.get('user');
