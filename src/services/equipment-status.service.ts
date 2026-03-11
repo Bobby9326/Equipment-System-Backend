@@ -37,32 +37,30 @@ const BLOCKED_TRANSITIONS: Record<NewStatus, NewStatus[]> = {
 
 export const changeStatusService = {
   change: async (params: {
-    equipmentIds: number[];
+    equipmentUuids: string[];
     newStatus: NewStatus;
     data: Record<string, any>;
     userUuid: string;
   }) => {
-    const { equipmentIds, newStatus, data, userUuid } = params;
+    const { equipmentUuids, newStatus, data, userUuid } = params;
     const today = new Date().toISOString().split('T')[0];
 
-    // 1. หา userId จาก userUuid
-    const userResult = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.uuid, userUuid));
+    // 1. resolve userUuid + equipmentUuids → ids ในครั้งเดียว
+    const [userResult, equipmentList] = await Promise.all([
+      db.select({ id: users.id }).from(users).where(eq(users.uuid, userUuid)),
+      db
+        .select({ id: equipment.id, uuid: equipment.uuid, status: equipment.status, equipmentCode: equipment.equipmentCode })
+        .from(equipment)
+        .where(and(inArray(equipment.uuid, equipmentUuids), isNull(equipment.deletedAt))),
+    ]);
+
     if (!userResult[0]) throw new BusinessError('ไม่พบผู้ใช้งาน');
     const userId = userResult[0].id;
 
-    // 2. ตรวจสอบครุภัณฑ์ทุกตัวก่อน transaction
-    const equipmentList = await db
-      .select({ id: equipment.id, status: equipment.status, equipmentCode: equipment.equipmentCode })
-      .from(equipment)
-      .where(inArray(equipment.id, equipmentIds));
-
-    if (equipmentList.length !== equipmentIds.length) {
-      const foundIds = equipmentList.map((e) => e.id);
-      const notFound = equipmentIds.filter((id) => !foundIds.includes(id));
-      throw new BusinessError(`ไม่พบครุภัณฑ์ id: ${notFound.join(', ')}`);
+    if (equipmentList.length !== equipmentUuids.length) {
+      const foundUuids = equipmentList.map((e) => e.uuid);
+      const notFound = equipmentUuids.filter((uuid) => !foundUuids.includes(uuid));
+      throw new BusinessError(`ไม่พบครุภัณฑ์ uuid: ${notFound.join(', ')}`);
     }
 
     for (const e of equipmentList) {
@@ -196,7 +194,7 @@ export const changeStatusService = {
           createdBy: userId,
         });
 
-        results.push({ equipmentId: e.id, newStatus, referenceId: newRecord?.id });
+        results.push({ equipmentUuid: e.uuid, newStatus, referenceId: newRecord?.id });
       }
 
       return results;
@@ -209,14 +207,56 @@ export const changeStatusService = {
 // (ไม่มี create เพราะสร้างผ่าน changeStatus แทน)
 // ============================================================
 
-export const equipmentNormalsService = {
-  getAll: async () => await db.select().from(equipmentNormals),
+// helper: แปลง equipment uuid → id
+const resolveEquipmentId = async (uuid: string): Promise<number> => {
+  const result = await db
+    .select({ id: equipment.id })
+    .from(equipment)
+    .where(and(eq(equipment.uuid, uuid), isNull(equipment.deletedAt)));
+  if (!result[0]) throw new BusinessError('ไม่พบครุภัณฑ์');
+  return result[0].id;
+};
 
-  getByEquipmentId: async (equipmentId: number) =>
-    await db.select().from(equipmentNormals).where(eq(equipmentNormals.equipmentId, equipmentId)),
+export const equipmentNormalsService = {
+  getAll: async () =>
+    db
+      .select({
+        equipmentUuid: equipment.uuid,
+        reason:               equipmentNormals.reason,
+        createdBy:            users.firstName,
+        createdAt:            equipmentNormals.createdAt,
+      })
+      .from(equipmentNormals)
+      .leftJoin(equipment, eq(equipmentNormals.equipmentId, equipment.id))
+      .leftJoin(users, eq(equipmentNormals.createdBy, users.id)),
+
+  getByEquipmentUuid: async (uuid: string) => {
+    const equipmentId = await resolveEquipmentId(uuid);
+    return db
+      .select({
+        equipmentUuid: equipment.uuid,
+        reason:               equipmentNormals.reason,
+        createdBy:            users.firstName,
+        createdAt:            equipmentNormals.createdAt,
+      })
+      .from(equipmentNormals)
+      .leftJoin(equipment, eq(equipmentNormals.equipmentId, equipment.id))
+      .leftJoin(users, eq(equipmentNormals.createdBy, users.id))
+      .where(eq(equipmentNormals.equipmentId, equipmentId));
+  },
 
   getById: async (id: number) => {
-    const result = await db.select().from(equipmentNormals).where(eq(equipmentNormals.id, id));
+    const result = await db
+      .select({
+        equipmentUuid: equipment.uuid,
+        reason:               equipmentNormals.reason,
+        createdBy:            users.firstName,
+        createdAt:            equipmentNormals.createdAt,
+      })
+      .from(equipmentNormals)
+      .leftJoin(equipment, eq(equipmentNormals.equipmentId, equipment.id))
+      .leftJoin(users, eq(equipmentNormals.createdBy, users.id))
+      .where(eq(equipmentNormals.id, id));
     return result[0] || null;
   },
 
@@ -232,13 +272,60 @@ export const equipmentNormalsService = {
 };
 
 export const equipmentBorrowsService = {
-  getAll: async () => await db.select().from(equipmentBorrows),
+  getAll: async () =>
+    db
+      .select({
+        equipmentUuid: equipment.uuid,
+        borrowerName:         equipmentBorrows.borrowerName,
+        borrowerDepartmentId: equipmentBorrows.borrowerDepartmentId,
+        borrowDate:           equipmentBorrows.borrowDate,
+        expectedReturnDate:   equipmentBorrows.expectedReturnDate,
+        actualReturnDate:     equipmentBorrows.actualReturnDate,
+        reason:               equipmentBorrows.reason,
+        createdBy:            users.firstName,
+        createdAt:            equipmentBorrows.createdAt,
+      })
+      .from(equipmentBorrows)
+      .leftJoin(equipment, eq(equipmentBorrows.equipmentId, equipment.id))
+      .leftJoin(users, eq(equipmentBorrows.createdBy, users.id)),
 
-  getByEquipmentId: async (equipmentId: number) =>
-    await db.select().from(equipmentBorrows).where(eq(equipmentBorrows.equipmentId, equipmentId)),
+  getByEquipmentUuid: async (uuid: string) => {
+    const equipmentId = await resolveEquipmentId(uuid);
+    return db
+      .select({
+        equipmentUuid: equipment.uuid,
+        borrowerName:         equipmentBorrows.borrowerName,
+        borrowerDepartmentId: equipmentBorrows.borrowerDepartmentId,
+        borrowDate:           equipmentBorrows.borrowDate,
+        expectedReturnDate:   equipmentBorrows.expectedReturnDate,
+        actualReturnDate:     equipmentBorrows.actualReturnDate,
+        reason:               equipmentBorrows.reason,
+        createdBy:            users.firstName,
+        createdAt:            equipmentBorrows.createdAt,
+      })
+      .from(equipmentBorrows)
+      .leftJoin(equipment, eq(equipmentBorrows.equipmentId, equipment.id))
+      .leftJoin(users, eq(equipmentBorrows.createdBy, users.id))
+      .where(eq(equipmentBorrows.equipmentId, equipmentId));
+  },
 
   getById: async (id: number) => {
-    const result = await db.select().from(equipmentBorrows).where(eq(equipmentBorrows.id, id));
+    const result = await db
+      .select({
+        equipmentUuid: equipment.uuid,
+        borrowerName:         equipmentBorrows.borrowerName,
+        borrowerDepartmentId: equipmentBorrows.borrowerDepartmentId,
+        borrowDate:           equipmentBorrows.borrowDate,
+        expectedReturnDate:   equipmentBorrows.expectedReturnDate,
+        actualReturnDate:     equipmentBorrows.actualReturnDate,
+        reason:               equipmentBorrows.reason,
+        createdBy:            users.firstName,
+        createdAt:            equipmentBorrows.createdAt,
+      })
+      .from(equipmentBorrows)
+      .leftJoin(equipment, eq(equipmentBorrows.equipmentId, equipment.id))
+      .leftJoin(users, eq(equipmentBorrows.createdBy, users.id))
+      .where(eq(equipmentBorrows.id, id));
     return result[0] || null;
   },
 
@@ -254,13 +341,63 @@ export const equipmentBorrowsService = {
 };
 
 export const equipmentRepairsService = {
-  getAll: async () => await db.select().from(equipmentRepairs),
+  getAll: async () =>
+    db
+      .select({
+        equipmentUuid: equipment.uuid,
+        repairReason:         equipmentRepairs.repairReason,
+        repairCompany:        equipmentRepairs.repairCompany,
+        cost:                 equipmentRepairs.cost,
+        startDate:            equipmentRepairs.startDate,
+        endDate:              equipmentRepairs.endDate,
+        actualEndDate:        equipmentRepairs.actualEndDate,
+        attachmentId:         equipmentRepairs.attachmentId,
+        createdBy:            users.firstName,
+        createdAt:            equipmentRepairs.createdAt,
+      })
+      .from(equipmentRepairs)
+      .leftJoin(equipment, eq(equipmentRepairs.equipmentId, equipment.id))
+      .leftJoin(users, eq(equipmentRepairs.createdBy, users.id)),
 
-  getByEquipmentId: async (equipmentId: number) =>
-    await db.select().from(equipmentRepairs).where(eq(equipmentRepairs.equipmentId, equipmentId)),
+  getByEquipmentUuid: async (uuid: string) => {
+    const equipmentId = await resolveEquipmentId(uuid);
+    return db
+      .select({
+        equipmentUuid: equipment.uuid,
+        repairReason:         equipmentRepairs.repairReason,
+        repairCompany:        equipmentRepairs.repairCompany,
+        cost:                 equipmentRepairs.cost,
+        startDate:            equipmentRepairs.startDate,
+        endDate:              equipmentRepairs.endDate,
+        actualEndDate:        equipmentRepairs.actualEndDate,
+        attachmentId:         equipmentRepairs.attachmentId,
+        createdBy:            users.firstName,
+        createdAt:            equipmentRepairs.createdAt,
+      })
+      .from(equipmentRepairs)
+      .leftJoin(equipment, eq(equipmentRepairs.equipmentId, equipment.id))
+      .leftJoin(users, eq(equipmentRepairs.createdBy, users.id))
+      .where(eq(equipmentRepairs.equipmentId, equipmentId));
+  },
 
   getById: async (id: number) => {
-    const result = await db.select().from(equipmentRepairs).where(eq(equipmentRepairs.id, id));
+    const result = await db
+      .select({
+        equipmentUuid: equipment.uuid,
+        repairReason:         equipmentRepairs.repairReason,
+        repairCompany:        equipmentRepairs.repairCompany,
+        cost:                 equipmentRepairs.cost,
+        startDate:            equipmentRepairs.startDate,
+        endDate:              equipmentRepairs.endDate,
+        actualEndDate:        equipmentRepairs.actualEndDate,
+        attachmentId:         equipmentRepairs.attachmentId,
+        createdBy:            users.firstName,
+        createdAt:            equipmentRepairs.createdAt,
+      })
+      .from(equipmentRepairs)
+      .leftJoin(equipment, eq(equipmentRepairs.equipmentId, equipment.id))
+      .leftJoin(users, eq(equipmentRepairs.createdBy, users.id))
+      .where(eq(equipmentRepairs.id, id));
     return result[0] || null;
   },
 
@@ -276,13 +413,45 @@ export const equipmentRepairsService = {
 };
 
 export const equipmentUnavailableService = {
-  getAll: async () => await db.select().from(equipmentUnavailable),
+  getAll: async () =>
+    db
+      .select({
+        equipmentUuid: equipment.uuid,
+        reason:               equipmentUnavailable.reason,
+        createdBy:            users.firstName,
+        createdAt:            equipmentUnavailable.createdAt,
+      })
+      .from(equipmentUnavailable)
+      .leftJoin(equipment, eq(equipmentUnavailable.equipmentId, equipment.id))
+      .leftJoin(users, eq(equipmentUnavailable.createdBy, users.id)),
 
-  getByEquipmentId: async (equipmentId: number) =>
-    await db.select().from(equipmentUnavailable).where(eq(equipmentUnavailable.equipmentId, equipmentId)),
+  getByEquipmentUuid: async (uuid: string) => {
+    const equipmentId = await resolveEquipmentId(uuid);
+    return db
+      .select({
+        equipmentUuid: equipment.uuid,
+        reason:               equipmentUnavailable.reason,
+        createdBy:            users.firstName,
+        createdAt:            equipmentUnavailable.createdAt,
+      })
+      .from(equipmentUnavailable)
+      .leftJoin(equipment, eq(equipmentUnavailable.equipmentId, equipment.id))
+      .leftJoin(users, eq(equipmentUnavailable.createdBy, users.id))
+      .where(eq(equipmentUnavailable.equipmentId, equipmentId));
+  },
 
   getById: async (id: number) => {
-    const result = await db.select().from(equipmentUnavailable).where(eq(equipmentUnavailable.id, id));
+    const result = await db
+      .select({
+        equipmentUuid: equipment.uuid,
+        reason:               equipmentUnavailable.reason,
+        createdBy:            users.firstName,
+        createdAt:            equipmentUnavailable.createdAt,
+      })
+      .from(equipmentUnavailable)
+      .leftJoin(equipment, eq(equipmentUnavailable.equipmentId, equipment.id))
+      .leftJoin(users, eq(equipmentUnavailable.createdBy, users.id))
+      .where(eq(equipmentUnavailable.id, id));
     return result[0] || null;
   },
 
@@ -298,13 +467,60 @@ export const equipmentUnavailableService = {
 };
 
 export const equipmentDisposalsService = {
-  getAll: async () => await db.select().from(equipmentDisposals),
+  getAll: async () =>
+    db
+      .select({
+        equipmentUuid: equipment.uuid,
+        disposalDate:         equipmentDisposals.disposalDate,
+        disposalMethod:       equipmentDisposals.disposalMethod,
+        cost:                 equipmentDisposals.cost,
+        approvedBy:           equipmentDisposals.approvedBy,
+        reason:               equipmentDisposals.reason,
+        attachmentId:         equipmentDisposals.attachmentId,
+        createdBy:            users.firstName,
+        createdAt:            equipmentDisposals.createdAt,
+      })
+      .from(equipmentDisposals)
+      .leftJoin(equipment, eq(equipmentDisposals.equipmentId, equipment.id))
+      .leftJoin(users, eq(equipmentDisposals.createdBy, users.id)),
 
-  getByEquipmentId: async (equipmentId: number) =>
-    await db.select().from(equipmentDisposals).where(eq(equipmentDisposals.equipmentId, equipmentId)),
+  getByEquipmentUuid: async (uuid: string) => {
+    const equipmentId = await resolveEquipmentId(uuid);
+    return db
+      .select({
+        equipmentUuid: equipment.uuid,
+        disposalDate:         equipmentDisposals.disposalDate,
+        disposalMethod:       equipmentDisposals.disposalMethod,
+        cost:                 equipmentDisposals.cost,
+        approvedBy:           equipmentDisposals.approvedBy,
+        reason:               equipmentDisposals.reason,
+        attachmentId:         equipmentDisposals.attachmentId,
+        createdBy:            users.firstName,
+        createdAt:            equipmentDisposals.createdAt,
+      })
+      .from(equipmentDisposals)
+      .leftJoin(equipment, eq(equipmentDisposals.equipmentId, equipment.id))
+      .leftJoin(users, eq(equipmentDisposals.createdBy, users.id))
+      .where(eq(equipmentDisposals.equipmentId, equipmentId));
+  },
 
   getById: async (id: number) => {
-    const result = await db.select().from(equipmentDisposals).where(eq(equipmentDisposals.id, id));
+    const result = await db
+      .select({
+        equipmentUuid: equipment.uuid,
+        disposalDate:         equipmentDisposals.disposalDate,
+        disposalMethod:       equipmentDisposals.disposalMethod,
+        cost:                 equipmentDisposals.cost,
+        approvedBy:           equipmentDisposals.approvedBy,
+        reason:               equipmentDisposals.reason,
+        attachmentId:         equipmentDisposals.attachmentId,
+        createdBy:            users.firstName,
+        createdAt:            equipmentDisposals.createdAt,
+      })
+      .from(equipmentDisposals)
+      .leftJoin(equipment, eq(equipmentDisposals.equipmentId, equipment.id))
+      .leftJoin(users, eq(equipmentDisposals.createdBy, users.id))
+      .where(eq(equipmentDisposals.id, id));
     return result[0] || null;
   },
 
@@ -320,8 +536,36 @@ export const equipmentDisposalsService = {
 };
 
 export const equipmentStatusLogsService = {
-  getAll: async () => await db.select().from(equipmentStatusLogs),
+  getAll: async () =>
+    db
+      .select({
+        equipmentUuid:  equipment.uuid,
+        status:         equipmentStatusLogs.status,
+        referenceTable: equipmentStatusLogs.referenceTable,
+        referenceId:    equipmentStatusLogs.referenceId,
+        remark:         equipmentStatusLogs.remark,
+        createdBy:      users.firstName,
+        createdAt:      equipmentStatusLogs.createdAt,
+      })
+      .from(equipmentStatusLogs)
+      .leftJoin(equipment, eq(equipmentStatusLogs.equipmentId, equipment.id))
+      .leftJoin(users, eq(equipmentStatusLogs.createdBy, users.id)),
 
-  getByEquipmentId: async (equipmentId: number) =>
-    await db.select().from(equipmentStatusLogs).where(eq(equipmentStatusLogs.equipmentId, equipmentId)),
+  getByEquipmentUuid: async (uuid: string) => {
+    const equipmentId = await resolveEquipmentId(uuid);
+    return db
+      .select({
+        equipmentUuid: equipment.uuid,
+        status:        equipmentStatusLogs.status,
+        referenceTable:equipmentStatusLogs.referenceTable,
+        referenceId:   equipmentStatusLogs.referenceId,
+        remark:        equipmentStatusLogs.remark,
+        createdBy:     users.firstName,
+        createdAt:     equipmentStatusLogs.createdAt,
+      })
+      .from(equipmentStatusLogs)
+      .leftJoin(equipment, eq(equipmentStatusLogs.equipmentId, equipment.id))
+      .leftJoin(users, eq(equipmentStatusLogs.createdBy, users.id))
+      .where(eq(equipmentStatusLogs.equipmentId, equipmentId));
+  },
 };

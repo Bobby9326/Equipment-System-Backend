@@ -80,7 +80,9 @@ export const authController = {
 
   // GET /api/auth/me — ดึงข้อมูล user ปัจจุบัน
   me: async (c: Context) => {
-    const user = c.get('user');
-    return successResponse(c, user, 'User retrieved successfully');
-  },
+    const user = c.get('user')
+    const profile = await authService.getProfile(user.uuid)
+    if (!profile) return errorResponse(c, 'User not found', 404)
+    return successResponse(c, profile)
+  }
 };

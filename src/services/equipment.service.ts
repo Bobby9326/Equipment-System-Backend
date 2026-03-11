@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { db } from '../config/database.js';
-import { equipment } from '../db/schema/index.js';
-import { eq, like, and, sql, isNull } from 'drizzle-orm';
+import { equipment, equipmentNormals, equipmentStatusLogs, users } from '../db/schema/index.js';
+import { eq, like, and, sql, isNull, inArray, desc } from 'drizzle-orm';
 import { BusinessError } from '../middlewares/error.js';
 
 export const equipmentService = {
@@ -35,7 +35,31 @@ export const equipmentService = {
     const whereClause = and(...conditions);
 
     const data = await db
-      .select()
+      .select({
+        uuid:               equipment.uuid,
+        equipmentCode:      equipment.equipmentCode,
+        equipmentName:      equipment.equipmentName,
+        equipmentNumber:    equipment.equipmentNumber,
+        equipmentTypeId:    equipment.equipmentTypeId,
+        departmentId:       equipment.departmentId,
+        activityId:         equipment.activityId,
+        fundId:             equipment.fundId,
+        fiscalYear:         equipment.fiscalYear,
+        price:              equipment.price,
+        unit:               equipment.unit,
+        acquisitionSourceId:equipment.acquisitionSourceId,
+        acquisitionMethodId:equipment.acquisitionMethodId,
+        acquisitionDate:    equipment.acquisitionDate,
+        company:            equipment.company,
+        sizeDetail:         equipment.sizeDetail,
+        buildingId:         equipment.buildingId,
+        roomId:             equipment.roomId,
+        projectId:          equipment.projectId,
+        status:             equipment.status,
+        note:               equipment.note,
+        createdAt:          equipment.createdAt,
+        updatedAt:          equipment.updatedAt,
+      })
       .from(equipment)
       .where(whereClause)
       .limit(limit)
@@ -55,12 +79,66 @@ export const equipmentService = {
   },
 
   getByUuid: async (uuid: string) => {
-    const result = await db.select().from(equipment).where(eq(equipment.uuid, uuid));
+    const result = await db
+      .select({
+        uuid:               equipment.uuid,
+        equipmentCode:      equipment.equipmentCode,
+        equipmentName:      equipment.equipmentName,
+        equipmentNumber:    equipment.equipmentNumber,
+        equipmentTypeId:    equipment.equipmentTypeId,
+        departmentId:       equipment.departmentId,
+        activityId:         equipment.activityId,
+        fundId:             equipment.fundId,
+        fiscalYear:         equipment.fiscalYear,
+        price:              equipment.price,
+        unit:               equipment.unit,
+        acquisitionSourceId:equipment.acquisitionSourceId,
+        acquisitionMethodId:equipment.acquisitionMethodId,
+        acquisitionDate:    equipment.acquisitionDate,
+        company:            equipment.company,
+        sizeDetail:         equipment.sizeDetail,
+        buildingId:         equipment.buildingId,
+        roomId:             equipment.roomId,
+        projectId:          equipment.projectId,
+        status:             equipment.status,
+        note:               equipment.note,
+        createdAt:          equipment.createdAt,
+        updatedAt:          equipment.updatedAt,
+      })
+      .from(equipment)
+      .where(eq(equipment.uuid, uuid));
     return result[0] || null;
   },
 
   getByCode: async (equipmentCode: string) => {
-    const result = await db.select().from(equipment).where(eq(equipment.equipmentCode, equipmentCode));
+    const result = await db
+      .select({
+        uuid:               equipment.uuid,
+        equipmentCode:      equipment.equipmentCode,
+        equipmentName:      equipment.equipmentName,
+        equipmentNumber:    equipment.equipmentNumber,
+        equipmentTypeId:    equipment.equipmentTypeId,
+        departmentId:       equipment.departmentId,
+        activityId:         equipment.activityId,
+        fundId:             equipment.fundId,
+        fiscalYear:         equipment.fiscalYear,
+        price:              equipment.price,
+        unit:               equipment.unit,
+        acquisitionSourceId:equipment.acquisitionSourceId,
+        acquisitionMethodId:equipment.acquisitionMethodId,
+        acquisitionDate:    equipment.acquisitionDate,
+        company:            equipment.company,
+        sizeDetail:         equipment.sizeDetail,
+        buildingId:         equipment.buildingId,
+        roomId:             equipment.roomId,
+        projectId:          equipment.projectId,
+        status:             equipment.status,
+        note:               equipment.note,
+        createdAt:          equipment.createdAt,
+        updatedAt:          equipment.updatedAt,
+      })
+      .from(equipment)
+      .where(eq(equipment.equipmentCode, equipmentCode));
     return result[0] || null;
   },
 
@@ -72,32 +150,101 @@ export const equipmentService = {
     userUuid: string;
     data: Omit<typeof equipment.$inferInsert, 'equipmentNumber'>;
   }) => {
-    const { numberPrefix, start, end, padLength = 3, data } = params;
+    const { numberPrefix, start, end, padLength = 3, userUuid, data } = params;
     const endNum = end ?? start;
 
     if (start > endNum) throw new BusinessError('ลำดับเริ่มต้นต้องน้อยกว่าหรือเท่ากับลำดับสิ้นสุด');
     if (endNum - start + 1 > 100) throw new BusinessError('สร้างได้ไม่เกิน 100 รายการต่อครั้ง');
 
-    const rows: (typeof equipment.$inferInsert)[] = [];
+    // หา user.id จาก uuid (ใช้ createdBy ใน equipmentNormals)
+    const userResult = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.uuid, userUuid));
+    if (!userResult[0]) throw new BusinessError('ไม่พบผู้ใช้งาน');
+    const createdBy = userResult[0].id;
 
+    // ตรวจ duplicate ทั้งหมดก่อน (ป้องกัน partial insert)
+    const equipmentNumbers: string[] = [];
     for (let i = start; i <= endNum; i++) {
       const seq = String(i).padStart(padLength, '0');
-      const equipmentNumber = `${numberPrefix}-${seq}`;
-
-      const existing = await db.select().from(equipment).where(eq(equipment.equipmentNumber, equipmentNumber));
-      if (existing[0]) throw new BusinessError(`เลขครุภัณฑ์ ${equipmentNumber} มีอยู่ในระบบแล้ว`);
-
-      rows.push({ ...data, uuid: randomUUID(), equipmentNumber });
+      equipmentNumbers.push(`${numberPrefix}-${seq}`);
     }
 
-    return await db.insert(equipment).values(rows).returning();
+    const duplicates = await db
+      .select({ equipmentNumber: equipment.equipmentNumber })
+      .from(equipment)
+      .where(inArray(equipment.equipmentNumber, equipmentNumbers));
+
+    if (duplicates.length > 0) {
+      throw new BusinessError(`เลขครุภัณฑ์ซ้ำ: ${duplicates.map(d => d.equipmentNumber).join(', ')}`);
+    }
+
+    // Transaction: insert equipment → insert equipment_normals
+    return await db.transaction(async (tx) => {
+      const rows = equipmentNumbers.map(equipmentNumber => ({
+        ...data,
+        uuid: randomUUID(),
+        equipmentNumber,
+      }));
+
+      // insert พร้อม id ไว้ใช้ภายใน transaction
+      const createdRaw = await tx.insert(equipment).values(rows).returning();
+
+      // insert normals + logs โดยใช้ id ภายใน
+      const normals = await tx.insert(equipmentNormals).values(
+        createdRaw.map(e => ({
+          equipmentId: e.id,
+          createdBy,
+          reason: 'สร้างครุภัณฑ์ใหม่',
+        }))
+      ).returning();
+
+      await tx.insert(equipmentStatusLogs).values(
+        createdRaw.map((e, i) => ({
+          equipmentId: e.id,
+          status: 'normal' as const,
+          referenceTable: 'equipment_normals',
+          referenceId: normals[i].id,
+          remark: 'สร้างครุภัณฑ์ใหม่',
+          createdBy,
+        }))
+      );
+
+      // return โดยไม่มี id
+      return createdRaw.map(({ id: _, ...e }) => e);
+    });
   },
 
   updateByUuid: async (uuid: string, data: Partial<typeof equipment.$inferInsert>) => {
     const result = await db.update(equipment)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(equipment.uuid, uuid))
-      .returning();
+      .returning({
+        uuid:               equipment.uuid,
+        equipmentCode:      equipment.equipmentCode,
+        equipmentName:      equipment.equipmentName,
+        equipmentNumber:    equipment.equipmentNumber,
+        equipmentTypeId:    equipment.equipmentTypeId,
+        departmentId:       equipment.departmentId,
+        activityId:         equipment.activityId,
+        fundId:             equipment.fundId,
+        fiscalYear:         equipment.fiscalYear,
+        price:              equipment.price,
+        unit:               equipment.unit,
+        acquisitionSourceId:equipment.acquisitionSourceId,
+        acquisitionMethodId:equipment.acquisitionMethodId,
+        acquisitionDate:    equipment.acquisitionDate,
+        company:            equipment.company,
+        sizeDetail:         equipment.sizeDetail,
+        buildingId:         equipment.buildingId,
+        roomId:             equipment.roomId,
+        projectId:          equipment.projectId,
+        status:             equipment.status,
+        note:               equipment.note,
+        createdAt:          equipment.createdAt,
+        updatedAt:          equipment.updatedAt,
+      });
     return result[0] || null;
   },
 
@@ -105,7 +252,7 @@ export const equipmentService = {
     const result = await db.update(equipment)
       .set({ deletedAt: new Date() })
       .where(eq(equipment.uuid, uuid))
-      .returning();
+      .returning({ uuid: equipment.uuid });
     return result[0] || null;
   },
 
@@ -132,5 +279,35 @@ export const equipmentService = {
       .groupBy(equipment.departmentId);
 
     return { total: total[0].count, byStatus, byDepartment };
+  },
+
+  // ประวัติการใช้งานครุภัณฑ์ (timeline)
+  getHistory: async (equipmentUuid: string) => {
+    const eqRow = await db
+      .select({ id: equipment.id })
+      .from(equipment)
+      .where(and(eq(equipment.uuid, equipmentUuid), isNull(equipment.deletedAt)));
+
+    if (!eqRow[0]) return null;
+
+    const logs = await db
+      .select({
+        status:    equipmentStatusLogs.status,
+        remark:    equipmentStatusLogs.remark,
+        createdAt: equipmentStatusLogs.createdAt,
+        firstName: users.firstName,
+        lastName:  users.lastName,
+      })
+      .from(equipmentStatusLogs)
+      .leftJoin(users, eq(equipmentStatusLogs.createdBy, users.id))
+      .where(eq(equipmentStatusLogs.equipmentId, eqRow[0].id))
+      .orderBy(desc(equipmentStatusLogs.createdAt));
+
+    return logs.map(log => ({
+      status:    log.status,
+      remark:    log.remark,
+      createdAt: log.createdAt,
+      createdBy: `${log.firstName ?? ''} ${log.lastName ?? ''}`.trim(),
+    }));
   },
 };

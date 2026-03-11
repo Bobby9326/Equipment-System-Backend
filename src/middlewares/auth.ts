@@ -14,6 +14,7 @@ export const authMiddleware = async (c: Context, next: Next) => {
     const payload = jwt.verify(token, env.JWT_SECRET) as {
       uuid: string;
       role: string;
+      departmentId: number | null;
     };
     c.set('user', payload);
     await next();

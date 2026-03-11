@@ -1,8 +1,5 @@
 import { Context } from 'hono';
 import { successResponse, errorResponse } from '../utils/response.js';
-import { db } from '../config/database.js';
-import { equipment } from '../db/schema/index.js';
-import { inArray } from 'drizzle-orm';
 import {
   changeStatusService,
   equipmentNormalsService,
@@ -23,10 +20,10 @@ export const changeStatusController = {
   change: async (c: Context) => {
     try {
       const user = c.get('user');
-      const { equipmentIds, newStatus, data } = await c.req.json();
+      const { equipmentUuids, newStatus, data } = await c.req.json();
 
-      if (!Array.isArray(equipmentIds) || equipmentIds.length === 0)
-        return errorResponse(c, 'equipmentIds must be a non-empty array', 400);
+      if (!Array.isArray(equipmentUuids) || equipmentUuids.length === 0)
+        return errorResponse(c, 'equipmentUuids must be a non-empty array', 400);
       if (!newStatus)
         return errorResponse(c, 'newStatus is required', 400);
 
@@ -34,22 +31,11 @@ export const changeStatusController = {
       if (!validStatuses.includes(newStatus))
         return errorResponse(c, `newStatus must be one of: ${validStatuses.join(', ')}`, 400);
 
-      // ตรวจสอบ department permission
-      if (!isAdminOrManager(user)) {
-        const equipmentList = await db
-          .select({ departmentId: equipment.departmentId })
-          .from(equipment)
-          .where(inArray(equipment.id, equipmentIds));
-
-        const hasOtherDept = equipmentList.some(e => e.departmentId !== user.departmentId);
-        if (hasOtherDept) return errorResponse(c, 'ไม่มีสิทธิ์จัดการครุภัณฑ์ของ department อื่น', 403);
-      }
-
       const result = await changeStatusService.change({
-        equipmentIds,
+        equipmentUuids,
         newStatus,
         data: data || {},
-        userUuid: user.uuid, // ดึงจาก token ไม่รับจาก body
+        userUuid: user.uuid,
       });
 
       return successResponse(
@@ -78,10 +64,10 @@ const createReadUpdateDeleteController = (service: any, name: string) => ({
     }
   },
 
-  getByEquipmentId: async (c: Context) => {
+  getByEquipmentUuid: async (c: Context) => {
     try {
-      const equipmentId = parseInt(c.req.param('equipmentId'));
-      const data = await service.getByEquipmentId(equipmentId);
+      const uuid = c.req.param('uuid');
+      const data = await service.getByEquipmentUuid(uuid);
       return successResponse(c, data, `${name} retrieved successfully`);
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
@@ -140,10 +126,10 @@ export const equipmentStatusLogsController = {
     }
   },
 
-  getByEquipmentId: async (c: Context) => {
+  getByEquipmentUuid: async (c: Context) => {
     try {
-      const equipmentId = parseInt(c.req.param('equipmentId'));
-      const data = await equipmentStatusLogsService.getByEquipmentId(equipmentId);
+      const uuid = c.req.param('uuid');
+      const data = await equipmentStatusLogsService.getByEquipmentUuid(uuid);
       return successResponse(c, data, 'Equipment status logs retrieved successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
