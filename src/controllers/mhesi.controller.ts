@@ -1,18 +1,19 @@
 import { Context } from 'hono';
 import { successResponse, errorResponse } from '../utils/response.js';
 import { mhesiService } from '../services/mhesi.service.js';
+import { getDepartmentFilter } from '../utils/permission.js';
 
 export const mhesiController = {
   getAll: async (c: Context) => {
     try {
-      const search = c.req.query('search');
+      const user      = c.get('user');
+      const search    = c.req.query('search');
       const projectId = c.req.query('projectId');
-      const departmentId = c.req.query('departmentId');
 
       const data = await mhesiService.getAll({
         search,
-        projectId: projectId ? parseInt(projectId) : undefined,
-        departmentId: departmentId ? parseInt(departmentId) : undefined,
+        projectId:    projectId ? parseInt(projectId) : undefined,
+        departmentId: getDepartmentFilter(user, c.req.query('departmentId')),
       });
       return successResponse(c, data, 'MHESI numbers retrieved successfully');
     } catch (error: any) {
@@ -20,13 +21,11 @@ export const mhesiController = {
     }
   },
 
-  getById: async (c: Context) => {
+  getByUuid: async (c: Context) => {
     try {
-      const id = parseInt(c.req.param('id'));
-      const data = await mhesiService.getById(id);
-
+      const uuid = c.req.param('uuid');
+      const data = await mhesiService.getByUuid(uuid);
       if (!data) return errorResponse(c, 'MHESI number not found', 404);
-
       return successResponse(c, data, 'MHESI number retrieved successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
@@ -46,6 +45,7 @@ export const mhesiController = {
   create: async (c: Context) => {
     try {
       const body = await c.req.json();
+      if (!body.mhesiNumber) return errorResponse(c, 'mhesiNumber is required', 400);
       const data = await mhesiService.create(body);
       return successResponse(c, data, 'MHESI number created successfully', 201);
     } catch (error: any) {
@@ -55,12 +55,10 @@ export const mhesiController = {
 
   update: async (c: Context) => {
     try {
-      const id = parseInt(c.req.param('id'));
+      const uuid = c.req.param('uuid');
       const body = await c.req.json();
-      const data = await mhesiService.update(id, body);
-
+      const data = await mhesiService.updateByUuid(uuid, body);
       if (!data) return errorResponse(c, 'MHESI number not found', 404);
-
       return successResponse(c, data, 'MHESI number updated successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
@@ -69,11 +67,9 @@ export const mhesiController = {
 
   delete: async (c: Context) => {
     try {
-      const id = parseInt(c.req.param('id'));
-      const data = await mhesiService.delete(id);
-
+      const uuid = c.req.param('uuid');
+      const data = await mhesiService.deleteByUuid(uuid);
       if (!data) return errorResponse(c, 'MHESI number not found', 404);
-
       return successResponse(c, data, 'MHESI number deleted successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);

@@ -667,10 +667,80 @@ export const swaggerConfig = {
         responses: { '201': { description: 'Created' } },
       },
     },
-    '/api/mhesi/{id}': {
-      get:    { tags: ['MHESI'], summary: 'Get MHESI by ID',        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
-      put:    { tags: ['MHESI'], summary: 'Update MHESI',           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' }, '404': { description: 'Not found' } } },
-      delete: { tags: ['MHESI'], summary: 'Delete MHESI (soft delete)', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' }, '404': { description: 'Not found' } } },
+    '/api/mhesi/{uuid}': {
+      get: {
+        tags: ['MHESI'],
+        summary: 'Get MHESI by UUID',
+        parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        responses: {
+          '200': {
+            description: 'Success',
+            content: {
+              'application/json': {
+                example: {
+                  success: true,
+                  data: {
+                    uuid:          '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+                    mhesiNumber:   '67-001-002-001',
+                    departmentId:  1,
+                    supportUnitId: 1,
+                    planId:        1,
+                    projectId:     1,
+                    activityName:  'จัดซื้อครุภัณฑ์สำนักงาน',
+                    date:          '2024-11-29',
+                    amount:        '25000.00',
+                    note:          'หมายเหตุ',
+                    attachmentId:  null,
+                    createdAt:     '2024-11-29T10:00:00.000Z',
+                    updatedAt:     '2024-11-29T10:00:00.000Z',
+                  },
+                },
+              },
+            },
+          },
+          '404': { description: 'Not found' },
+        },
+      },
+      put: {
+        tags: ['MHESI'],
+        summary: 'Update MHESI',
+        parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  mhesiNumber:   { type: 'string', maxLength: 16 },
+                  departmentId:  { type: 'integer' },
+                  supportUnitId: { type: 'integer' },
+                  planId:        { type: 'integer' },
+                  projectId:     { type: 'integer' },
+                  activityName:  { type: 'string' },
+                  date:          { type: 'string', format: 'date' },
+                  amount:        { type: 'number' },
+                  note:          { type: 'string' },
+                  attachmentId:  { type: 'integer' },
+                },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'Updated' }, '404': { description: 'Not found' } },
+      },
+      delete: {
+        tags: ['MHESI'],
+        summary: 'Delete MHESI (soft delete)',
+        parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        responses: {
+          '200': {
+            description: 'Deleted',
+            content: { 'application/json': { example: { success: true, data: { uuid: '3fa85f64-...' } } } },
+          },
+          '404': { description: 'Not found' },
+        },
+      },
     },
     '/api/mhesi/project/{projectId}': {
       get: { tags: ['MHESI'], summary: 'Get MHESI by project', parameters: [{ name: 'projectId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' } } },

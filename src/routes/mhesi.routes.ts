@@ -4,10 +4,10 @@ import { mhesiController } from '../controllers/mhesi.controller.js';
 const mhesi = new Hono();
 
 mhesi.get('/', mhesiController.getAll);
-mhesi.get('/:id', mhesiController.getById);
+mhesi.get('/:uuid', mhesiController.getByUuid)
 mhesi.get('/project/:projectId', mhesiController.getByProjectId);
 mhesi.post('/', mhesiController.create);
-mhesi.put('/:id', mhesiController.update);
-mhesi.delete('/:id', mhesiController.delete);
+mhesi.put('/:uuid', mhesiController.update)
+mhesi.delete('/:uuid', mhesiController.delete)
 
 export default mhesi;

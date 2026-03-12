@@ -1,58 +1,85 @@
+import { randomUUID } from 'crypto';
 import { db } from '../config/database.js';
 import { mhesiNumbers } from '../db/schema/index.js';
-import { eq, like, or } from 'drizzle-orm';
+import { eq, like, and, isNull, or } from 'drizzle-orm';
+
+// fields ที่ return ออก API (ไม่มี id)
+const MHESI_SELECT = {
+  uuid:          mhesiNumbers.uuid,
+  mhesiNumber:   mhesiNumbers.mhesiNumber,
+  departmentId:  mhesiNumbers.departmentId,
+  supportUnitId: mhesiNumbers.supportUnitId,
+  planId:        mhesiNumbers.planId,
+  projectId:     mhesiNumbers.projectId,
+  activityName:  mhesiNumbers.activityName,
+  date:          mhesiNumbers.date,
+  amount:        mhesiNumbers.amount,
+  note:          mhesiNumbers.note,
+  attachmentId:  mhesiNumbers.attachmentId,
+  createdAt:     mhesiNumbers.createdAt,
+  updatedAt:     mhesiNumbers.updatedAt,
+};
 
 export const mhesiService = {
   getAll: async (filters?: { search?: string; projectId?: number; departmentId?: number }) => {
-    let query = db.select().from(mhesiNumbers);
+    const conditions = [isNull(mhesiNumbers.deletedAt)];
 
     if (filters?.search) {
-      query = query.where(
+      conditions.push(
         or(
-          like(mhesiNumbers.mhesiNumber, `%${filters.search}%`),
+          like(mhesiNumbers.mhesiNumber,  `%${filters.search}%`),
           like(mhesiNumbers.activityName, `%${filters.search}%`)
-        )
-      ) as any;
+        ) as any
+      );
     }
+    if (filters?.projectId)    conditions.push(eq(mhesiNumbers.projectId,    filters.projectId));
+    if (filters?.departmentId) conditions.push(eq(mhesiNumbers.departmentId, filters.departmentId));
 
-    if (filters?.projectId) {
-      query = query.where(eq(mhesiNumbers.projectId, filters.projectId)) as any;
-    }
-
-    if (filters?.departmentId) {
-      query = query.where(eq(mhesiNumbers.departmentId, filters.departmentId)) as any;
-    }
-
-    return await query;
+    return db.select(MHESI_SELECT).from(mhesiNumbers).where(and(...conditions));
   },
 
-  getById: async (id: number) => {
-    const result = await db.select().from(mhesiNumbers).where(eq(mhesiNumbers.id, id));
+  getByUuid: async (uuid: string) => {
+    const result = await db
+      .select(MHESI_SELECT)
+      .from(mhesiNumbers)
+      .where(and(eq(mhesiNumbers.uuid, uuid), isNull(mhesiNumbers.deletedAt)));
     return result[0] || null;
   },
 
   getByProjectId: async (projectId: number) => {
-    return await db.select().from(mhesiNumbers).where(eq(mhesiNumbers.projectId, projectId));
+    return db
+      .select(MHESI_SELECT)
+      .from(mhesiNumbers)
+      .where(and(eq(mhesiNumbers.projectId, projectId), isNull(mhesiNumbers.deletedAt)));
   },
 
-  create: async (data: typeof mhesiNumbers.$inferInsert) => {
-    const result = await db.insert(mhesiNumbers).values(data).returning();
+  create: async (data: Omit<typeof mhesiNumbers.$inferInsert,
+    | 'id' | 'uuid' | 'createdAt' | 'updatedAt' | 'deletedAt'
+  >) => {
+    const result = await db
+      .insert(mhesiNumbers)
+      .values({ ...data, uuid: randomUUID() })
+      .returning(MHESI_SELECT);
     return result[0];
   },
 
-  update: async (id: number, data: Partial<typeof mhesiNumbers.$inferInsert>) => {
-    const result = await db.update(mhesiNumbers)
+  updateByUuid: async (uuid: string, data: Partial<Omit<typeof mhesiNumbers.$inferInsert,
+    | 'id' | 'uuid' | 'createdAt' | 'deletedAt'
+  >>) => {
+    const result = await db
+      .update(mhesiNumbers)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(mhesiNumbers.id, id))
-      .returning();
+      .where(and(eq(mhesiNumbers.uuid, uuid), isNull(mhesiNumbers.deletedAt)))
+      .returning(MHESI_SELECT);
     return result[0] || null;
   },
 
-  delete: async (id: number) => {
-    const result = await db.update(mhesiNumbers)
+  deleteByUuid: async (uuid: string) => {
+    const result = await db
+      .update(mhesiNumbers)
       .set({ deletedAt: new Date() })
-      .where(eq(mhesiNumbers.id, id))
-      .returning();
+      .where(and(eq(mhesiNumbers.uuid, uuid), isNull(mhesiNumbers.deletedAt)))
+      .returning({ uuid: mhesiNumbers.uuid });
     return result[0] || null;
   },
 };
