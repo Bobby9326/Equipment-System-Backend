@@ -1,7 +1,7 @@
 import { cors } from 'hono/cors';
 
 export const corsConfig = cors({
-  origin: '*', // Change this to specific origins in production
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
   exposeHeaders: ['Content-Length', 'X-Request-Id'],
