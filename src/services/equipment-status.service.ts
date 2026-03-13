@@ -221,7 +221,8 @@ export const equipmentNormalsService = {
   getAll: async () =>
     db
       .select({
-        equipmentUuid: equipment.uuid,
+        equipmentUuid:   equipment.uuid,
+        equipmentNumber: equipment.equipmentNumber,
         reason:               equipmentNormals.reason,
         createdBy:            users.firstName,
         createdAt:            equipmentNormals.createdAt,
@@ -234,7 +235,8 @@ export const equipmentNormalsService = {
     const equipmentId = await resolveEquipmentId(uuid);
     return db
       .select({
-        equipmentUuid: equipment.uuid,
+        equipmentUuid:   equipment.uuid,
+        equipmentNumber: equipment.equipmentNumber,
         reason:               equipmentNormals.reason,
         createdBy:            users.firstName,
         createdAt:            equipmentNormals.createdAt,
@@ -248,7 +250,8 @@ export const equipmentNormalsService = {
   getById: async (id: number) => {
     const result = await db
       .select({
-        equipmentUuid: equipment.uuid,
+        equipmentUuid:   equipment.uuid,
+        equipmentNumber: equipment.equipmentNumber,
         reason:               equipmentNormals.reason,
         createdBy:            users.firstName,
         createdAt:            equipmentNormals.createdAt,
@@ -275,7 +278,8 @@ export const equipmentBorrowsService = {
   getAll: async () =>
     db
       .select({
-        equipmentUuid: equipment.uuid,
+        equipmentUuid:   equipment.uuid,
+        equipmentNumber: equipment.equipmentNumber,
         borrowerName:         equipmentBorrows.borrowerName,
         borrowerDepartmentId: equipmentBorrows.borrowerDepartmentId,
         borrowDate:           equipmentBorrows.borrowDate,
@@ -293,7 +297,8 @@ export const equipmentBorrowsService = {
     const equipmentId = await resolveEquipmentId(uuid);
     return db
       .select({
-        equipmentUuid: equipment.uuid,
+        equipmentUuid:   equipment.uuid,
+        equipmentNumber: equipment.equipmentNumber,
         borrowerName:         equipmentBorrows.borrowerName,
         borrowerDepartmentId: equipmentBorrows.borrowerDepartmentId,
         borrowDate:           equipmentBorrows.borrowDate,
@@ -312,7 +317,8 @@ export const equipmentBorrowsService = {
   getById: async (id: number) => {
     const result = await db
       .select({
-        equipmentUuid: equipment.uuid,
+        equipmentUuid:   equipment.uuid,
+        equipmentNumber: equipment.equipmentNumber,
         borrowerName:         equipmentBorrows.borrowerName,
         borrowerDepartmentId: equipmentBorrows.borrowerDepartmentId,
         borrowDate:           equipmentBorrows.borrowDate,
@@ -344,7 +350,8 @@ export const equipmentRepairsService = {
   getAll: async () =>
     db
       .select({
-        equipmentUuid: equipment.uuid,
+        equipmentUuid:   equipment.uuid,
+        equipmentNumber: equipment.equipmentNumber,
         repairReason:         equipmentRepairs.repairReason,
         repairCompany:        equipmentRepairs.repairCompany,
         cost:                 equipmentRepairs.cost,
@@ -363,7 +370,8 @@ export const equipmentRepairsService = {
     const equipmentId = await resolveEquipmentId(uuid);
     return db
       .select({
-        equipmentUuid: equipment.uuid,
+        equipmentUuid:   equipment.uuid,
+        equipmentNumber: equipment.equipmentNumber,
         repairReason:         equipmentRepairs.repairReason,
         repairCompany:        equipmentRepairs.repairCompany,
         cost:                 equipmentRepairs.cost,
@@ -383,7 +391,8 @@ export const equipmentRepairsService = {
   getById: async (id: number) => {
     const result = await db
       .select({
-        equipmentUuid: equipment.uuid,
+        equipmentUuid:   equipment.uuid,
+        equipmentNumber: equipment.equipmentNumber,
         repairReason:         equipmentRepairs.repairReason,
         repairCompany:        equipmentRepairs.repairCompany,
         cost:                 equipmentRepairs.cost,
@@ -416,7 +425,8 @@ export const equipmentUnavailableService = {
   getAll: async () =>
     db
       .select({
-        equipmentUuid: equipment.uuid,
+        equipmentUuid:   equipment.uuid,
+        equipmentNumber: equipment.equipmentNumber,
         reason:               equipmentUnavailable.reason,
         createdBy:            users.firstName,
         createdAt:            equipmentUnavailable.createdAt,
@@ -429,7 +439,8 @@ export const equipmentUnavailableService = {
     const equipmentId = await resolveEquipmentId(uuid);
     return db
       .select({
-        equipmentUuid: equipment.uuid,
+        equipmentUuid:   equipment.uuid,
+        equipmentNumber: equipment.equipmentNumber,
         reason:               equipmentUnavailable.reason,
         createdBy:            users.firstName,
         createdAt:            equipmentUnavailable.createdAt,
@@ -443,7 +454,8 @@ export const equipmentUnavailableService = {
   getById: async (id: number) => {
     const result = await db
       .select({
-        equipmentUuid: equipment.uuid,
+        equipmentUuid:   equipment.uuid,
+        equipmentNumber: equipment.equipmentNumber,
         reason:               equipmentUnavailable.reason,
         createdBy:            users.firstName,
         createdAt:            equipmentUnavailable.createdAt,
@@ -470,7 +482,8 @@ export const equipmentDisposalsService = {
   getAll: async () =>
     db
       .select({
-        equipmentUuid: equipment.uuid,
+        equipmentUuid:   equipment.uuid,
+        equipmentNumber: equipment.equipmentNumber,
         disposalDate:         equipmentDisposals.disposalDate,
         disposalMethod:       equipmentDisposals.disposalMethod,
         cost:                 equipmentDisposals.cost,
@@ -488,7 +501,8 @@ export const equipmentDisposalsService = {
     const equipmentId = await resolveEquipmentId(uuid);
     return db
       .select({
-        equipmentUuid: equipment.uuid,
+        equipmentUuid:   equipment.uuid,
+        equipmentNumber: equipment.equipmentNumber,
         disposalDate:         equipmentDisposals.disposalDate,
         disposalMethod:       equipmentDisposals.disposalMethod,
         cost:                 equipmentDisposals.cost,
@@ -507,7 +521,8 @@ export const equipmentDisposalsService = {
   getById: async (id: number) => {
     const result = await db
       .select({
-        equipmentUuid: equipment.uuid,
+        equipmentUuid:   equipment.uuid,
+        equipmentNumber: equipment.equipmentNumber,
         disposalDate:         equipmentDisposals.disposalDate,
         disposalMethod:       equipmentDisposals.disposalMethod,
         cost:                 equipmentDisposals.cost,
@@ -555,7 +570,8 @@ export const equipmentStatusLogsService = {
     const equipmentId = await resolveEquipmentId(uuid);
     return db
       .select({
-        equipmentUuid: equipment.uuid,
+        equipmentUuid:   equipment.uuid,
+        equipmentNumber: equipment.equipmentNumber,
         status:        equipmentStatusLogs.status,
         referenceTable:equipmentStatusLogs.referenceTable,
         referenceId:   equipmentStatusLogs.referenceId,
