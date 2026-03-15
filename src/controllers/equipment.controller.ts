@@ -12,6 +12,8 @@ export const equipmentController = {
       const equipmentTypeId = c.req.query('equipmentTypeId');
       const page = parseInt(c.req.query('page') || '1');
       const limit = parseInt(c.req.query('limit') || '10');
+      const sortBy = c.req.query('sortBy');
+      const sortDir = c.req.query('sortDir') as 'asc' | 'desc' | undefined;
 
       const result = await equipmentService.getAll({
         search,
@@ -20,6 +22,8 @@ export const equipmentController = {
         equipmentTypeId: equipmentTypeId ? parseInt(equipmentTypeId) : undefined,
         page,
         limit,
+        sortBy,
+        sortDir,
       });
 
       return paginatedResponse(c, result.data, result.total, result.page, result.limit);

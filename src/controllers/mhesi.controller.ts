@@ -1,5 +1,5 @@
 import { Context } from 'hono';
-import { successResponse, errorResponse } from '../utils/response.js';
+import { successResponse, errorResponse, paginatedResponse } from '../utils/response.js';
 import { mhesiService } from '../services/mhesi.service.js';
 import { getDepartmentFilter } from '../utils/permission.js';
 
@@ -9,13 +9,21 @@ export const mhesiController = {
       const user      = c.get('user');
       const search    = c.req.query('search');
       const projectId = c.req.query('projectId');
+      const page      = parseInt(c.req.query('page')  || '1');
+      const limit     = parseInt(c.req.query('limit') || '10');
+      const sortBy    = c.req.query('sortBy');
+      const sortDir   = c.req.query('sortDir') as 'asc' | 'desc' | undefined;
 
-      const data = await mhesiService.getAll({
+      const result = await mhesiService.getAll({
         search,
         projectId:    projectId ? parseInt(projectId) : undefined,
         departmentId: getDepartmentFilter(user, c.req.query('departmentId')),
+        page,
+        limit,
+        sortBy,
+        sortDir,
       });
-      return successResponse(c, data, 'MHESI numbers retrieved successfully');
+      return paginatedResponse(c, result.data, result.total, result.page, result.limit);
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
     }

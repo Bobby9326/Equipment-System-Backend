@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { db } from '../config/database.js';
 import { equipment, equipmentNormals, equipmentStatusLogs, users } from '../db/schema/index.js';
-import { eq, like, and, sql, isNull, inArray, desc } from 'drizzle-orm';
+import { eq, like, and, sql, isNull, inArray, desc, asc } from 'drizzle-orm';
 import { BusinessError } from '../middlewares/error.js';
 
 export const equipmentService = {
@@ -12,6 +12,8 @@ export const equipmentService = {
     equipmentTypeId?: number;
     page?: number;
     limit?: number;
+    sortBy?: string;
+    sortDir?: 'asc' | 'desc';
   }) => {
     const page = filters?.page || 1;
     const limit = filters?.limit || 10;
@@ -33,6 +35,27 @@ export const equipmentService = {
     }
 
     const whereClause = and(...conditions);
+
+    const dir = filters?.sortDir === 'desc' ? desc : asc;
+    const orderByCols = (() => {
+      switch (filters?.sortBy) {
+        case 'equipmentNumber':  return [dir(equipment.equipmentNumber)];
+        case 'equipmentName':    return [dir(equipment.equipmentName)];
+        case 'status': {
+          const statusCase = sql`CASE ${equipment.status}
+            WHEN 'normal'      THEN 0
+            WHEN 'borrowed'    THEN 1
+            WHEN 'repair'      THEN 2
+            WHEN 'unavailable' THEN 3
+            WHEN 'disposed'    THEN 4
+            ELSE 99 END`;
+          return [filters?.sortDir === 'desc' ? desc(statusCase) : asc(statusCase)];
+        }
+        case 'acquisitionDate':  return [dir(equipment.acquisitionDate), asc(equipment.equipmentNumber)];
+        case 'price':            return [dir(equipment.price),           asc(equipment.equipmentNumber)];
+        default:                 return [desc(equipment.createdAt)];
+      }
+    })();
 
     const data = await db
       .select({
@@ -62,6 +85,7 @@ export const equipmentService = {
       })
       .from(equipment)
       .where(whereClause)
+      .orderBy(...orderByCols)
       .limit(limit)
       .offset(offset);
 

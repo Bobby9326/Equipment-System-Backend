@@ -1,15 +1,19 @@
 import { Context } from 'hono';
-import { successResponse, errorResponse } from '../utils/response.js';
+import { successResponse, errorResponse, paginatedResponse } from '../utils/response.js';
 import { projectsService } from '../services/projects.service.js';
 
 export const projectsController = {
   getAll: async (c: Context) => {
     try {
-      const search = c.req.query('search');
-      const status = c.req.query('status');
+      const search   = c.req.query('search');
+      const status   = c.req.query('status');
+      const page     = parseInt(c.req.query('page')  || '1');
+      const limit    = parseInt(c.req.query('limit') || '10');
+      const sortBy   = c.req.query('sortBy');
+      const sortDir  = c.req.query('sortDir') as 'asc' | 'desc' | undefined;
 
-      const data = await projectsService.getAll({ search, status });
-      return successResponse(c, data, 'Projects retrieved successfully');
+      const result = await projectsService.getAll({ search, status, page, limit, sortBy, sortDir });
+      return paginatedResponse(c, result.data, result.total, result.page, result.limit);
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
     }

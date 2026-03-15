@@ -1,9 +1,20 @@
 import { db } from '../config/database.js';
 import { projects } from '../db/schema/index.js';
-import { eq, sql, like, and, isNull } from 'drizzle-orm';
+import { eq, sql, like, and, isNull, asc, desc } from 'drizzle-orm';
 
 export const projectsService = {
-  getAll: async (filters?: { search?: string; status?: string }) => {
+  getAll: async (filters?: {
+    search?: string;
+    status?: string;
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortDir?: 'asc' | 'desc';
+  }) => {
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 10;
+    const offset = (page - 1) * limit;
+
     const conditions = [isNull(projects.deletedAt)];
 
     if (filters?.search) {
@@ -14,7 +25,39 @@ export const projectsService = {
       conditions.push(eq(projects.status, filters.status));
     }
 
-    return await db.select().from(projects).where(and(...conditions));
+    const whereClause = and(...conditions);
+
+    const dir = filters?.sortDir === 'desc' ? desc : asc;
+    const orderByCols = (() => {
+      switch (filters?.sortBy) {
+        case 'id':          return [dir(projects.id)];
+        case 'projectName': return [dir(projects.projectName)];
+        case 'projectType': return [dir(projects.projectTypeId)];
+        case 'projectDate': return [dir(projects.projectDate), asc(projects.id)];
+        case 'budget':      return [dir(projects.budget),      asc(projects.id)];
+        default:            return [desc(projects.createdAt)];
+      }
+    })();
+
+    const data = await db
+      .select()
+      .from(projects)
+      .where(whereClause)
+      .orderBy(...orderByCols)
+      .limit(limit)
+      .offset(offset);
+
+    const totalResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(projects)
+      .where(whereClause);
+
+    return {
+      data,
+      total: totalResult[0].count,
+      page,
+      limit,
+    };
   },
 
   getById: async (id: number) => {
