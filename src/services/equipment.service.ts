@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { db } from '../config/database.js';
 import { equipment, equipmentNormals, equipmentStatusLogs, users } from '../db/schema/index.js';
-import { eq, like, and, sql, isNull, inArray, desc, asc } from 'drizzle-orm';
+import { eq, like, or, and, sql, isNull, inArray, desc, asc } from 'drizzle-orm';
 import { BusinessError } from '../middlewares/error.js';
 
 export const equipmentService = {
@@ -22,7 +22,12 @@ export const equipmentService = {
     const conditions = [isNull(equipment.deletedAt)];
 
     if (filters?.search) {
-      conditions.push(like(equipment.equipmentName, `%${filters.search}%`));
+      const s = `%${filters.search}%`;
+      conditions.push(or(
+        like(equipment.equipmentNumber, s),
+        like(equipment.equipmentCode,   s),
+        like(equipment.equipmentName,   s),
+      )!);
     }
     if (filters?.status) {
       conditions.push(eq(equipment.status, filters.status));
