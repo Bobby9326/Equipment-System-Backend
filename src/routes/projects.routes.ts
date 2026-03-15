@@ -3,11 +3,12 @@ import { projectsController } from '../controllers/projects.controller.js';
 
 const projects = new Hono();
 
-projects.get('/', projectsController.getAll);
-projects.get('/stats', projectsController.getStats);
-projects.get('/:id', projectsController.getById);
-projects.post('/', projectsController.create);
-projects.put('/:id', projectsController.update);
-projects.delete('/:id', projectsController.delete);
+projects.get('/',               projectsController.getAll);
+projects.get('/stats',          projectsController.getStats);
+projects.get('/:uuid/history',  projectsController.getHistory);
+projects.get('/:uuid',          projectsController.getByUuid);
+projects.post('/',              projectsController.create);
+projects.put('/:uuid',          projectsController.update);
+projects.delete('/:uuid',       projectsController.delete);
 
 export default projects;

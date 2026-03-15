@@ -19,10 +19,10 @@ export const projectsController = {
     }
   },
 
-  getById: async (c: Context) => {
+  getByUuid: async (c: Context) => {
     try {
-      const id = parseInt(c.req.param('id'));
-      const data = await projectsService.getById(id);
+      const uuid = c.req.param('uuid');
+      const data = await projectsService.getByUuid(uuid);
 
       if (!data) return errorResponse(c, 'Project not found', 404);
 
@@ -44,9 +44,10 @@ export const projectsController = {
 
   update: async (c: Context) => {
     try {
-      const id = parseInt(c.req.param('id'));
+      const user = c.get('user');
+      const uuid = c.req.param('uuid');
       const body = await c.req.json();
-      const data = await projectsService.update(id, body);
+      const data = await projectsService.updateByUuid(uuid, body, user.uuid);
 
       if (!data) return errorResponse(c, 'Project not found', 404);
 
@@ -58,8 +59,8 @@ export const projectsController = {
 
   delete: async (c: Context) => {
     try {
-      const id = parseInt(c.req.param('id'));
-      const data = await projectsService.delete(id);
+      const uuid = c.req.param('uuid');
+      const data = await projectsService.deleteByUuid(uuid);
 
       if (!data) return errorResponse(c, 'Project not found', 404);
 
@@ -73,6 +74,16 @@ export const projectsController = {
     try {
       const data = await projectsService.getStats();
       return successResponse(c, data, 'Project statistics retrieved successfully');
+    } catch (error: any) {
+      return errorResponse(c, error.message, 500);
+    }
+  },
+
+  getHistory: async (c: Context) => {
+    try {
+      const uuid = c.req.param('uuid');
+      const data = await projectsService.getHistory(uuid);
+      return successResponse(c, data, 'Project history retrieved successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
     }

@@ -6,3 +6,4 @@ export * from './equipment';
 export * from './equipment-status';
 export * from './attachments';
 export * from './refresh-tokens';
+export * from './audit-logs';

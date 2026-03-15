@@ -63,9 +63,10 @@ export const mhesiController = {
 
   update: async (c: Context) => {
     try {
+      const user = c.get('user');
       const uuid = c.req.param('uuid');
       const body = await c.req.json();
-      const data = await mhesiService.updateByUuid(uuid, body);
+      const data = await mhesiService.updateByUuid(uuid, body, user.uuid);
       if (!data) return errorResponse(c, 'MHESI number not found', 404);
       return successResponse(c, data, 'MHESI number updated successfully');
     } catch (error: any) {
@@ -79,6 +80,16 @@ export const mhesiController = {
       const data = await mhesiService.deleteByUuid(uuid);
       if (!data) return errorResponse(c, 'MHESI number not found', 404);
       return successResponse(c, data, 'MHESI number deleted successfully');
+    } catch (error: any) {
+      return errorResponse(c, error.message, 500);
+    }
+  },
+
+  getHistory: async (c: Context) => {
+    try {
+      const uuid = c.req.param('uuid');
+      const data = await mhesiService.getHistory(uuid);
+      return successResponse(c, data, 'MHESI history retrieved successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
     }

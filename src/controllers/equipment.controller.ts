@@ -116,7 +116,7 @@ export const equipmentController = {
         if (dup && dup.uuid !== uuid) return errorResponse(c, 'Equipment code already exists', 400);
       }
 
-      const data = await equipmentService.updateByUuid(uuid, body);
+      const data = await equipmentService.updateByUuid(uuid, body, user.uuid);
       return successResponse(c, data, 'Equipment updated successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);

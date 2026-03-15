@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
+import { auditService } from './audit.service.js';
 import { db } from '../config/database.js';
-import { mhesiNumbers, supportUnits, planSections, projects } from '../db/schema/index.js';
+import { mhesiNumbers, supportUnits, planSections, projects, users } from '../db/schema/index.js';
 import { eq, like, and, isNull, or, sql, asc, desc } from 'drizzle-orm';
 
 // fields ที่ return ออก API (ไม่มี id)
@@ -114,12 +115,26 @@ export const mhesiService = {
 
   updateByUuid: async (uuid: string, data: Partial<Omit<typeof mhesiNumbers.$inferInsert,
     | 'id' | 'uuid' | 'createdAt' | 'deletedAt'
-  >>) => {
+  >>, userUuid?: string) => {
+    const before = await mhesiService.getByUuid(uuid);
+    if (!before) return null;
+
     const result = await db
       .update(mhesiNumbers)
       .set({ ...data, updatedAt: new Date() })
       .where(and(eq(mhesiNumbers.uuid, uuid), isNull(mhesiNumbers.deletedAt)))
       .returning(MHESI_SELECT);
+
+    if (userUuid && result[0]) {
+      await auditService.log({
+        entity:     'mhesi',
+        entityUuid: uuid,
+        action:     'update',
+        before:     before as any,
+        after:      result[0] as any,
+        userUuid,
+      });
+    }
     return result[0] || null;
   },
 
@@ -130,5 +145,37 @@ export const mhesiService = {
       .where(and(eq(mhesiNumbers.uuid, uuid), isNull(mhesiNumbers.deletedAt)))
       .returning({ uuid: mhesiNumbers.uuid });
     return result[0] || null;
+  },
+
+  // ประวัติการแก้ไข mhesi
+  getHistory: async (uuid: string) => {
+    let editLogs: any[] = [];
+    try {
+      const { auditLogs } = await import('../db/schema/index.js');
+      editLogs = await db
+        .select({
+          action:    auditLogs.action,
+          before:    auditLogs.before,
+          after:     auditLogs.after,
+          createdAt: auditLogs.createdAt,
+          firstName: users.firstName,
+          lastName:  users.lastName,
+        })
+        .from(auditLogs)
+        .leftJoin(users, eq(auditLogs.changedBy, users.id))
+        .where(and(
+          eq(auditLogs.entity,     'mhesi'),
+          eq(auditLogs.entityUuid, uuid)
+        ))
+        .orderBy(desc(auditLogs.createdAt));
+    } catch (_) {}
+
+    return editLogs.map(log => ({
+      action:    log.action,
+      before:    log.before,
+      after:     log.after,
+      createdAt: log.createdAt,
+      changedBy: `${log.firstName ?? ''} ${log.lastName ?? ''}`.trim(),
+    }));
   },
 };

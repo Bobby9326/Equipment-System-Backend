@@ -619,10 +619,40 @@ export const swaggerConfig = {
     '/api/projects/stats': {
       get: { tags: ['Projects'], summary: 'Get project statistics', responses: { '200': { description: 'Success' } } },
     },
-    '/api/projects/{id}': {
-      get:    { tags: ['Projects'], summary: 'Get project by ID',      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
-      put:    { tags: ['Projects'], summary: 'Update project',         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' }, '404': { description: 'Not found' } } },
-      delete: { tags: ['Projects'], summary: 'Delete project (soft delete)', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'Deleted' }, '404': { description: 'Not found' } } },
+    '/api/projects/{uuid}/history': {
+      get: {
+        tags: ['Projects'],
+        summary: 'Get project edit history',
+        description: 'ดึงประวัติการแก้ไขข้อมูล project — แสดง before/after ของ field ที่เปลี่ยน',
+        parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        responses: {
+          '200': {
+            description: 'Success',
+            content: {
+              'application/json': {
+                example: {
+                  success: true,
+                  data: [
+                    {
+                      action:    'update',
+                      before:    { projectName: 'โครงการเก่า', budget: '50000.00' },
+                      after:     { projectName: 'โครงการใหม่', budget: '75000.00' },
+                      createdAt: '2026-03-15T10:00:00.000Z',
+                      changedBy: 'สมชาย ใจดี',
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          '404': { description: 'Not found' },
+        },
+      },
+    },
+    '/api/projects/{uuid}': {
+      get:    { tags: ['Projects'], summary: 'Get project by UUID',        parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }], responses: { '200': { description: 'Success' }, '404': { description: 'Not found' } } },
+      put:    { tags: ['Projects'], summary: 'Update project',             parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { '200': { description: 'Updated' }, '404': { description: 'Not found' } } },
+      delete: { tags: ['Projects'], summary: 'Delete project (soft delete)', parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }], responses: { '200': { description: 'Deleted' }, '404': { description: 'Not found' } } },
     },
 
     // ==================== MHESI ====================
@@ -667,6 +697,37 @@ export const swaggerConfig = {
         responses: { '201': { description: 'Created' } },
       },
     },
+    '/api/mhesi/{uuid}/history': {
+      get: {
+        tags: ['MHESI'],
+        summary: 'Get MHESI edit history',
+        description: 'ดึงประวัติการแก้ไขข้อมูล MHESI — แสดง before/after ของ field ที่เปลี่ยน',
+        parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        responses: {
+          '200': {
+            description: 'Success',
+            content: {
+              'application/json': {
+                example: {
+                  success: true,
+                  data: [
+                    {
+                      action:    'update',
+                      before:    { activityName: 'จัดซื้อเก้าอี้', amount: '25000.00' },
+                      after:     { activityName: 'จัดซื้อเก้าอี้สำนักงาน', amount: '30000.00' },
+                      createdAt: '2026-03-15T10:00:00.000Z',
+                      changedBy: 'สมชาย ใจดี',
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          '404': { description: 'Not found' },
+        },
+      },
+    },
+
     '/api/mhesi/{uuid}': {
       get: {
         tags: ['MHESI'],

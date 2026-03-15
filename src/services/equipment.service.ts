@@ -1,8 +1,9 @@
 import { randomUUID } from 'crypto';
 import { db } from '../config/database.js';
-import { equipment, equipmentNormals, equipmentStatusLogs, users } from '../db/schema/index.js';
-import { eq, like, and, sql, isNull, inArray, desc, asc } from 'drizzle-orm';
+import { equipment, equipmentNormals, equipmentStatusLogs, auditLogs, users } from '../db/schema/index.js';
+import { eq, like, or, and, sql, isNull, inArray, desc, asc } from 'drizzle-orm';
 import { BusinessError } from '../middlewares/error.js';
+import { auditService } from './audit.service.js';
 
 export const equipmentService = {
   getAll: async (filters?: {
@@ -22,7 +23,12 @@ export const equipmentService = {
     const conditions = [isNull(equipment.deletedAt)];
 
     if (filters?.search) {
-      conditions.push(like(equipment.equipmentName, `%${filters.search}%`));
+      const s = `%${filters.search}%`;
+      conditions.push(or(
+        like(equipment.equipmentNumber, s),
+        like(equipment.equipmentCode,   s),
+        like(equipment.equipmentName,   s),
+      )!);
     }
     if (filters?.status) {
       conditions.push(eq(equipment.status, filters.status));
@@ -240,7 +246,10 @@ export const equipmentService = {
     });
   },
 
-  updateByUuid: async (uuid: string, data: Partial<typeof equipment.$inferInsert>) => {
+  updateByUuid: async (uuid: string, data: Partial<typeof equipment.$inferInsert>, userUuid?: string) => {
+    const before = await equipmentService.getByUuid(uuid);
+    if (!before) return null;
+
     const result = await db.update(equipment)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(equipment.uuid, uuid))
@@ -269,6 +278,16 @@ export const equipmentService = {
         createdAt:          equipment.createdAt,
         updatedAt:          equipment.updatedAt,
       });
+    if (userUuid && result[0]) {
+      await auditService.log({
+        entity:     'equipment',
+        entityUuid: uuid,
+        action:     'update',
+        before:     before as any,
+        after:      result[0] as any,
+        userUuid,
+      });
+    }
     return result[0] || null;
   },
 
@@ -305,7 +324,7 @@ export const equipmentService = {
     return { total: total[0].count, byStatus, byDepartment };
   },
 
-  // ประวัติการใช้งานครุภัณฑ์ (timeline)
+  // ประวัติการเปลี่ยนสถานะ + การแก้ไขข้อมูล รวมเป็น timeline เดียว
   getHistory: async (equipmentUuid: string) => {
     const eqRow = await db
       .select({ id: equipment.id })
@@ -314,24 +333,52 @@ export const equipmentService = {
 
     if (!eqRow[0]) return null;
 
-    const logs = await db
+    // 1. ประวัติเปลี่ยนสถานะ
+    const statusLogs = await db
       .select({
+        type:      sql<string>`'status_change'`,
         status:    equipmentStatusLogs.status,
         remark:    equipmentStatusLogs.remark,
+        before:    sql<null>`null`,
+        after:     sql<null>`null`,
         createdAt: equipmentStatusLogs.createdAt,
         firstName: users.firstName,
         lastName:  users.lastName,
       })
       .from(equipmentStatusLogs)
       .leftJoin(users, eq(equipmentStatusLogs.createdBy, users.id))
-      .where(eq(equipmentStatusLogs.equipmentId, eqRow[0].id))
-      .orderBy(desc(equipmentStatusLogs.createdAt));
+      .where(eq(equipmentStatusLogs.equipmentId, eqRow[0].id));
 
-    return logs.map(log => ({
-      status:    log.status,
-      remark:    log.remark,
-      createdAt: log.createdAt,
-      createdBy: `${log.firstName ?? ''} ${log.lastName ?? ''}`.trim(),
-    }));
+    // 2. ประวัติแก้ไขข้อมูล
+    const editLogs = await db
+      .select({
+        type:      sql<string>`'edit'`,
+        status:    sql<null>`null`,
+        remark:    sql<null>`null`,
+        before:    auditLogs.before,
+        after:     auditLogs.after,
+        createdAt: auditLogs.createdAt,
+        firstName: users.firstName,
+        lastName:  users.lastName,
+      })
+      .from(auditLogs)
+      .leftJoin(users, eq(auditLogs.changedBy, users.id))
+      .where(and(
+        eq(auditLogs.entity,     'equipment'),
+        eq(auditLogs.entityUuid, equipmentUuid)
+      ));
+
+    // 3. รวม + เรียงตาม createdAt ล่าสุดก่อน
+    return [...statusLogs, ...editLogs]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .map(log => ({
+        type:      log.type,
+        status:    log.status  ?? undefined,
+        remark:    log.remark  ?? undefined,
+        before:    log.before  ?? undefined,
+        after:     log.after   ?? undefined,
+        createdAt: log.createdAt,
+        createdBy: `${log.firstName ?? ''} ${log.lastName ?? ''}`.trim(),
+      }));
   },
 };
