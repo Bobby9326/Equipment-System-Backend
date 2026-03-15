@@ -10,6 +10,7 @@ export const equipmentController = {
       const search = c.req.query('search');
       const status = c.req.query('status');
       const equipmentTypeId = c.req.query('equipmentTypeId');
+      const projectId = c.req.query('projectId');
       const page = parseInt(c.req.query('page') || '1');
       const limit = parseInt(c.req.query('limit') || '10');
       const sortBy = c.req.query('sortBy');
@@ -20,6 +21,7 @@ export const equipmentController = {
         status,
         departmentId: getDepartmentFilter(user, c.req.query('departmentId')),
         equipmentTypeId: equipmentTypeId ? parseInt(equipmentTypeId) : undefined,
+        projectId: projectId ? parseInt(projectId) : undefined,
         page,
         limit,
         sortBy,

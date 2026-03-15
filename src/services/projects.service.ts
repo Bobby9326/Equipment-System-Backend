@@ -5,6 +5,7 @@ import { projects, users } from '../db/schema/index.js';
 import { eq, sql, like, and, isNull, asc, desc } from 'drizzle-orm';
 
 const PROJECT_SELECT = {
+  id:                  projects.id,
   uuid:                projects.uuid,
   projectName:         projects.projectName,
   projectTypeId:       projects.projectTypeId,

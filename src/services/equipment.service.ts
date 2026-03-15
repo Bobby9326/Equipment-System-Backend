@@ -11,6 +11,7 @@ export const equipmentService = {
     status?: string;
     departmentId?: number;
     equipmentTypeId?: number;
+    projectId?: number;
     page?: number;
     limit?: number;
     sortBy?: string;
@@ -38,6 +39,9 @@ export const equipmentService = {
     }
     if (filters?.equipmentTypeId) {
       conditions.push(eq(equipment.equipmentTypeId, filters.equipmentTypeId));
+    }
+    if (filters?.projectId) {
+      conditions.push(eq(equipment.projectId, filters.projectId));
     }
 
     const whereClause = and(...conditions);
