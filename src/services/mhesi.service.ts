@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { auditService } from './audit.service.js';
 import { db } from '../config/database.js';
 import { mhesiNumbers, supportUnits, planSections, projects, users } from '../db/schema/index.js';
-import { eq, like, and, isNull, or, sql, asc, desc } from 'drizzle-orm';
+import { eq, like, and, isNull, or, sql, asc, desc, gte, lte } from 'drizzle-orm';
 
 // fields ที่ return ออก API (ไม่มี id)
 const MHESI_SELECT = {
@@ -26,6 +26,12 @@ export const mhesiService = {
     search?: string;
     projectId?: number;
     departmentId?: number;
+    supportUnitId?: number;
+    planId?: number;
+    amountMin?: number;
+    amountMax?: number;
+    dateFrom?: string;
+    dateTo?: string;
     page?: number;
     limit?: number;
     sortBy?: string;
@@ -47,6 +53,12 @@ export const mhesiService = {
     }
     if (filters?.projectId)    conditions.push(eq(mhesiNumbers.projectId,    filters.projectId));
     if (filters?.departmentId) conditions.push(eq(mhesiNumbers.departmentId, filters.departmentId));
+    if (filters?.supportUnitId) conditions.push(eq(mhesiNumbers.supportUnitId, filters.supportUnitId));
+    if (filters?.planId)        conditions.push(eq(mhesiNumbers.planId,        filters.planId));
+    if (filters?.amountMin !== undefined) conditions.push(gte(mhesiNumbers.amount, String(filters.amountMin)));
+    if (filters?.amountMax !== undefined) conditions.push(lte(mhesiNumbers.amount, String(filters.amountMax)));
+    if (filters?.dateFrom) conditions.push(gte(mhesiNumbers.date, filters.dateFrom));
+    if (filters?.dateTo)   conditions.push(lte(mhesiNumbers.date, filters.dateTo));
 
     const whereClause = and(...conditions);
 

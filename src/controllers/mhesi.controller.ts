@@ -6,17 +6,29 @@ import { getDepartmentFilter } from '../utils/permission.js';
 export const mhesiController = {
   getAll: async (c: Context) => {
     try {
-      const user      = c.get('user');
-      const search    = c.req.query('search');
-      const projectId = c.req.query('projectId');
-      const page      = parseInt(c.req.query('page')  || '1');
-      const limit     = parseInt(c.req.query('limit') || '10');
-      const sortBy    = c.req.query('sortBy');
-      const sortDir   = c.req.query('sortDir') as 'asc' | 'desc' | undefined;
+      const user          = c.get('user');
+      const search        = c.req.query('search');
+      const projectId     = c.req.query('projectId');
+      const supportUnitId = c.req.query('supportUnitId');
+      const planId        = c.req.query('planId');
+      const amountMin     = c.req.query('amountMin');
+      const amountMax     = c.req.query('amountMax');
+      const dateFrom      = c.req.query('dateFrom');
+      const dateTo        = c.req.query('dateTo');
+      const page          = parseInt(c.req.query('page')  || '1');
+      const limit         = parseInt(c.req.query('limit') || '10');
+      const sortBy        = c.req.query('sortBy');
+      const sortDir       = c.req.query('sortDir') as 'asc' | 'desc' | undefined;
 
       const result = await mhesiService.getAll({
         search,
-        projectId:    projectId ? parseInt(projectId) : undefined,
+        projectId:    projectId    ? parseInt(projectId)    : undefined,
+        supportUnitId: supportUnitId ? parseInt(supportUnitId) : undefined,
+        planId:        planId        ? parseInt(planId)        : undefined,
+        amountMin:     amountMin     ? parseFloat(amountMin)   : undefined,
+        amountMax:     amountMax     ? parseFloat(amountMax)   : undefined,
+        dateFrom,
+        dateTo,
         departmentId: getDepartmentFilter(user, c.req.query('departmentId')),
         page,
         limit,
