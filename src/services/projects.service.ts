@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { db } from '../config/database.js';
 import { auditService } from './audit.service.js';
 import { projects, users } from '../db/schema/index.js';
-import { eq, sql, like, and, isNull, asc, desc } from 'drizzle-orm';
+import { eq, sql, like, and, isNull, asc, desc, gte, lte } from 'drizzle-orm';
 
 const PROJECT_SELECT = {
   id:                  projects.id,
@@ -22,6 +22,12 @@ export const projectsService = {
   getAll: async (filters?: {
     search?: string;
     status?: string;
+    projectTypeId?: number;
+    acquisitionSourceId?: number;
+    dateFrom?: string;
+    dateTo?: string;
+    budgetMin?: number;
+    budgetMax?: number;
     page?: number;
     limit?: number;
     sortBy?: string;
@@ -33,25 +39,28 @@ export const projectsService = {
 
     const conditions = [isNull(projects.deletedAt)];
 
-    if (filters?.search) {
-      conditions.push(like(projects.projectName, `%${filters.search}%`));
-    }
-
-    if (filters?.status) {
-      conditions.push(eq(projects.status, filters.status));
-    }
+    if (filters?.search)              conditions.push(like(projects.projectName, `%${filters.search}%`));
+    if (filters?.status)              conditions.push(eq(projects.status, filters.status));
+    if (filters?.projectTypeId)       conditions.push(eq(projects.projectTypeId, filters.projectTypeId));
+    if (filters?.acquisitionSourceId) conditions.push(eq(projects.acquisitionSourceId, filters.acquisitionSourceId));
+    if (filters?.dateFrom)            conditions.push(gte(projects.projectDate, filters.dateFrom));
+    if (filters?.dateTo)              conditions.push(lte(projects.projectDate, filters.dateTo));
+    if (filters?.budgetMin != null)   conditions.push(gte(projects.budget, String(filters.budgetMin)));
+    if (filters?.budgetMax != null)   conditions.push(lte(projects.budget, String(filters.budgetMax)));
 
     const whereClause = and(...conditions);
 
     const dir = filters?.sortDir === 'desc' ? desc : asc;
     const orderByCols = (() => {
       switch (filters?.sortBy) {
-        case 'id':          return [dir(projects.id)];
-        case 'projectName': return [dir(projects.projectName)];
-        case 'projectType': return [dir(projects.projectTypeId)];
-        case 'projectDate': return [dir(projects.projectDate), asc(projects.id)];
-        case 'budget':      return [dir(projects.budget),      asc(projects.id)];
-        default:            return [desc(projects.createdAt)];
+        case 'id':                  return [dir(projects.id)];
+        case 'projectName':         return [dir(projects.projectName)];
+        case 'projectType':         return [dir(projects.projectTypeId)];
+        case 'acquisitionSourceId': return [dir(projects.acquisitionSourceId), asc(projects.id)];
+        case 'status':              return [dir(projects.status),              asc(projects.id)];
+        case 'projectDate':         return [dir(projects.projectDate),         asc(projects.id)];
+        case 'budget':              return [dir(projects.budget),              asc(projects.id)];
+        default:                    return [desc(projects.createdAt)];
       }
     })();
 

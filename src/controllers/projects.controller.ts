@@ -5,14 +5,20 @@ import { projectsService } from '../services/projects.service.js';
 export const projectsController = {
   getAll: async (c: Context) => {
     try {
-      const search   = c.req.query('search');
-      const status   = c.req.query('status');
-      const page     = parseInt(c.req.query('page')  || '1');
-      const limit    = parseInt(c.req.query('limit') || '10');
-      const sortBy   = c.req.query('sortBy');
-      const sortDir  = c.req.query('sortDir') as 'asc' | 'desc' | undefined;
+      const search              = c.req.query('search');
+      const status              = c.req.query('status');
+      const projectTypeId       = c.req.query('projectTypeId')       ? parseInt(c.req.query('projectTypeId')!)       : undefined;
+      const acquisitionSourceId = c.req.query('acquisitionSourceId') ? parseInt(c.req.query('acquisitionSourceId')!) : undefined;
+      const dateFrom            = c.req.query('dateFrom');
+      const dateTo              = c.req.query('dateTo');
+      const budgetMin           = c.req.query('budgetMin')  ? parseFloat(c.req.query('budgetMin')!)  : undefined;
+      const budgetMax           = c.req.query('budgetMax')  ? parseFloat(c.req.query('budgetMax')!)  : undefined;
+      const page                = parseInt(c.req.query('page')  || '1');
+      const limit               = parseInt(c.req.query('limit') || '10');
+      const sortBy              = c.req.query('sortBy');
+      const sortDir             = c.req.query('sortDir') as 'asc' | 'desc' | undefined;
 
-      const result = await projectsService.getAll({ search, status, page, limit, sortBy, sortDir });
+      const result = await projectsService.getAll({ search, status, projectTypeId, acquisitionSourceId, dateFrom, dateTo, budgetMin, budgetMax, page, limit, sortBy, sortDir });
       return paginatedResponse(c, result.data, result.total, result.page, result.limit);
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
