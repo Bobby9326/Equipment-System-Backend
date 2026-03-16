@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { db } from '../config/database.js';
-import { equipment, equipmentNormals, equipmentStatusLogs, auditLogs, users } from '../db/schema/index.js';
+import { equipment, equipmentNormals, equipmentStatusLogs, equipmentBorrows, equipmentRepairs, equipmentUnavailable, equipmentDisposals, auditLogs, users } from '../db/schema/index.js';
 import { eq, like, or, and, sql, isNull, inArray, desc, asc } from 'drizzle-orm';
 import { BusinessError } from '../middlewares/error.js';
 import { auditService } from './audit.service.js';
@@ -340,17 +340,41 @@ export const equipmentService = {
     // 1. ประวัติเปลี่ยนสถานะ
     const statusLogs = await db
       .select({
-        type:      sql<string>`'status_change'`,
-        status:    equipmentStatusLogs.status,
-        remark:    equipmentStatusLogs.remark,
-        before:    sql<null>`null`,
-        after:     sql<null>`null`,
-        createdAt: equipmentStatusLogs.createdAt,
-        firstName: users.firstName,
-        lastName:  users.lastName,
+        type:                sql<string>`'status_change'`,
+        status:              equipmentStatusLogs.status,
+        remark:              equipmentStatusLogs.remark,
+        referenceTable:      equipmentStatusLogs.referenceTable,
+        before:              sql<null>`null`,
+        after:               sql<null>`null`,
+        createdAt:           equipmentStatusLogs.createdAt,
+        firstName:           users.firstName,
+        lastName:            users.lastName,
+        // borrow details
+        borrowerName:        equipmentBorrows.borrowerName,
+        borrowDate:          equipmentBorrows.borrowDate,
+        expectedReturnDate:  equipmentBorrows.expectedReturnDate,
+        borrowReason:        equipmentBorrows.reason,
+        // repair details
+        repairReason:        equipmentRepairs.repairReason,
+        repairStartDate:     equipmentRepairs.startDate,
+        repairEndDate:       equipmentRepairs.endDate,
+        repairCompany:       equipmentRepairs.repairCompany,
+        repairCost:          equipmentRepairs.cost,
+        // unavailable details
+        unavailableReason:   equipmentUnavailable.reason,
+        // disposal details
+        disposalDate:        equipmentDisposals.disposalDate,
+        disposalMethod:      equipmentDisposals.disposalMethod,
+        disposalApprovedBy:  equipmentDisposals.approvedBy,
+        disposalCost:        equipmentDisposals.cost,
+        disposalReason:      equipmentDisposals.reason,
       })
       .from(equipmentStatusLogs)
       .leftJoin(users, eq(equipmentStatusLogs.createdBy, users.id))
+      .leftJoin(equipmentBorrows,    and(eq(equipmentStatusLogs.referenceTable, 'equipment_borrows'),    eq(equipmentStatusLogs.referenceId, equipmentBorrows.id)))
+      .leftJoin(equipmentRepairs,    and(eq(equipmentStatusLogs.referenceTable, 'equipment_repairs'),    eq(equipmentStatusLogs.referenceId, equipmentRepairs.id)))
+      .leftJoin(equipmentUnavailable,and(eq(equipmentStatusLogs.referenceTable, 'equipment_unavailable'),eq(equipmentStatusLogs.referenceId, equipmentUnavailable.id)))
+      .leftJoin(equipmentDisposals,  and(eq(equipmentStatusLogs.referenceTable, 'equipment_disposals'),  eq(equipmentStatusLogs.referenceId, equipmentDisposals.id)))
       .where(eq(equipmentStatusLogs.equipmentId, eqRow[0].id));
 
     // 2. ประวัติแก้ไขข้อมูล
@@ -375,14 +399,29 @@ export const equipmentService = {
     // 3. รวม + เรียงตาม createdAt ล่าสุดก่อน
     return [...statusLogs, ...editLogs]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .map(log => ({
-        type:      log.type,
-        status:    log.status  ?? undefined,
-        remark:    log.remark  ?? undefined,
-        before:    log.before  ?? undefined,
-        after:     log.after   ?? undefined,
-        createdAt: log.createdAt,
-        createdBy: `${log.firstName ?? ''} ${log.lastName ?? ''}`.trim(),
-      }));
+      .map((log: any) => {
+        const base = {
+          type:      log.type,
+          status:    log.status    ?? undefined,
+          remark:    log.remark    ?? undefined,
+          before:    log.before    ?? undefined,
+          after:     log.after     ?? undefined,
+          createdAt: log.createdAt,
+          createdBy: `${log.firstName ?? ''} ${log.lastName ?? ''}`.trim(),
+        };
+        if (log.referenceTable === 'equipment_borrows') {
+          return { ...base, detail: { borrowerName: log.borrowerName, borrowDate: log.borrowDate, expectedReturnDate: log.expectedReturnDate, reason: log.borrowReason } };
+        }
+        if (log.referenceTable === 'equipment_repairs') {
+          return { ...base, detail: { repairReason: log.repairReason, startDate: log.repairStartDate, endDate: log.repairEndDate, repairCompany: log.repairCompany, cost: log.repairCost } };
+        }
+        if (log.referenceTable === 'equipment_unavailable') {
+          return { ...base, detail: { reason: log.unavailableReason } };
+        }
+        if (log.referenceTable === 'equipment_disposals') {
+          return { ...base, detail: { disposalDate: log.disposalDate, disposalMethod: log.disposalMethod, approvedBy: log.disposalApprovedBy, disposalCost: log.disposalCost, reason: log.disposalReason } };
+        }
+        return base;
+      });
   },
 };

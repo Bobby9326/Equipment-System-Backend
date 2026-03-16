@@ -32,7 +32,7 @@ const BLOCKED_TRANSITIONS: Record<NewStatus, NewStatus[]> = {
   borrowed:    ['disposed'],
   repair:      ['disposed'],
   unavailable: ['disposed'],
-  disposed:    ['normal', 'borrowed', 'repair', 'unavailable', 'disposed'],
+  disposed:    ['disposed'],
 };
 
 export const changeStatusService = {
