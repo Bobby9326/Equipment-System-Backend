@@ -57,6 +57,27 @@
       "when": 1773557817162,
       "tag": "0007_nostalgic_beyonder",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1773709108270,
+      "tag": "0008_worried_korg",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1773711013536,
+      "tag": "0009_chunky_chronomancer",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1773714820287,
+      "tag": "0010_whole_blonde_phantom",
+      "breakpoints": true
     }
   ]
 }

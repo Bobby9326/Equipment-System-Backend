@@ -171,6 +171,6 @@ export const equipmentController = {
       return successResponse(c, data, 'Equipment statistics retrieved successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
-    }
+    } 
   },
 };

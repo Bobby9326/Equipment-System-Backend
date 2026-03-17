@@ -1,0 +1,1 @@
+ALTER TABLE "mhesi_numbers" ALTER COLUMN "mhesi_number" SET DATA TYPE varchar(50);

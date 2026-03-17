@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { auditService } from './audit.service.js';
 import { db } from '../config/database.js';
-import { mhesiNumbers, supportUnits, planSections, projects, users } from '../db/schema/index.js';
+import { mhesiNumbers, planSections, projects, users } from '../db/schema/index.js';
 import { eq, like, and, isNull, or, sql, asc, desc, gte, lte } from 'drizzle-orm';
 
 // fields ที่ return ออก API (ไม่มี id)
@@ -9,7 +9,7 @@ const MHESI_SELECT = {
   uuid:          mhesiNumbers.uuid,
   mhesiNumber:   mhesiNumbers.mhesiNumber,
   departmentId:  mhesiNumbers.departmentId,
-  supportUnitId: mhesiNumbers.supportUnitId,
+  faculty:       mhesiNumbers.faculty,
   planId:        mhesiNumbers.planId,
   projectId:     mhesiNumbers.projectId,
   activityName:  mhesiNumbers.activityName,
@@ -26,7 +26,7 @@ export const mhesiService = {
     search?: string;
     projectId?: number;
     departmentId?: number;
-    supportUnitId?: number;
+    faculty?: string;
     planId?: number;
     amountMin?: number;
     amountMax?: number;
@@ -53,7 +53,7 @@ export const mhesiService = {
     }
     if (filters?.projectId)    conditions.push(eq(mhesiNumbers.projectId,    filters.projectId));
     if (filters?.departmentId) conditions.push(eq(mhesiNumbers.departmentId, filters.departmentId));
-    if (filters?.supportUnitId) conditions.push(eq(mhesiNumbers.supportUnitId, filters.supportUnitId));
+    if (filters?.faculty) conditions.push(eq(mhesiNumbers.faculty, filters.faculty));
     if (filters?.planId)        conditions.push(eq(mhesiNumbers.planId,        filters.planId));
     if (filters?.amountMin !== undefined) conditions.push(gte(mhesiNumbers.amount, String(filters.amountMin)));
     if (filters?.amountMax !== undefined) conditions.push(lte(mhesiNumbers.amount, String(filters.amountMax)));
@@ -70,8 +70,8 @@ export const mhesiService = {
         case 'date':         return [dir(mhesiNumbers.date), asc(mhesiNumbers.mhesiNumber)];
         case 'amount':       return [dir(mhesiNumbers.amount), asc(mhesiNumbers.mhesiNumber)];
         case 'project':      return [dir(projects.projectName),   asc(mhesiNumbers.mhesiNumber)];
-        case 'supportUnit':  return [dir(supportUnits.name),      asc(mhesiNumbers.mhesiNumber)];
-        case 'plan':         return [dir(planSections.name),       asc(mhesiNumbers.mhesiNumber)];
+        case 'faculty':      return [dir(mhesiNumbers.faculty),    asc(mhesiNumbers.mhesiNumber)];
+        case 'plan':         return [dir(planSections.name),              asc(mhesiNumbers.mhesiNumber)];
         default:             return [desc(mhesiNumbers.createdAt)];
       }
     })();
@@ -80,8 +80,7 @@ export const mhesiService = {
       .select(MHESI_SELECT)
       .from(mhesiNumbers)
       .leftJoin(projects,     eq(mhesiNumbers.projectId,    projects.id))
-      .leftJoin(supportUnits, eq(mhesiNumbers.supportUnitId, supportUnits.id))
-      .leftJoin(planSections, eq(mhesiNumbers.planId,        planSections.id))
+      .leftJoin(planSections, eq(mhesiNumbers.planId, planSections.id))
       .where(whereClause)
       .orderBy(...orderByCols)
       .limit(limit)

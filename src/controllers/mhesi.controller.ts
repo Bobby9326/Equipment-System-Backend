@@ -9,7 +9,7 @@ export const mhesiController = {
       const user          = c.get('user');
       const search        = c.req.query('search');
       const projectId     = c.req.query('projectId');
-      const supportUnitId = c.req.query('supportUnitId');
+      const faculty       = c.req.query('faculty');
       const planId        = c.req.query('planId');
       const amountMin     = c.req.query('amountMin');
       const amountMax     = c.req.query('amountMax');
@@ -23,7 +23,7 @@ export const mhesiController = {
       const result = await mhesiService.getAll({
         search,
         projectId:    projectId    ? parseInt(projectId)    : undefined,
-        supportUnitId: supportUnitId ? parseInt(supportUnitId) : undefined,
+        faculty,
         planId:        planId        ? parseInt(planId)        : undefined,
         amountMin:     amountMin     ? parseFloat(amountMin)   : undefined,
         amountMax:     amountMax     ? parseFloat(amountMax)   : undefined,

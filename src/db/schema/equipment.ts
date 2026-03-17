@@ -1,7 +1,6 @@
 import { pgTable, serial, varchar, integer, decimal, date, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import {
   departments,
-  activities,
   funds,
   equipmentTypes,
   acquisitionSources,
@@ -20,7 +19,7 @@ export const equipment = pgTable('equipment', {
   equipmentNumber: varchar('equipment_number', { length: 100 }).notNull().unique(),
   equipmentTypeId: integer('equipment_type_id').references(() => equipmentTypes.id),
   departmentId: integer('department_id').references(() => departments.id),
-  activityId: integer('activity_id').references(() => activities.id),
+  activity: varchar('activity', { length: 255 }),
   fundId: integer('fund_id').references(() => funds.id),
   fiscalYear: integer('fiscal_year'),
   price: decimal('price', { precision: 15, scale: 2 }),
