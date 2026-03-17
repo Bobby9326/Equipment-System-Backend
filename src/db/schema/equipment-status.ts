@@ -1,7 +1,7 @@
 import { pgTable, serial, integer, varchar, text, date, decimal, timestamp } from 'drizzle-orm/pg-core';
 import { equipment } from './equipment';
 import { users } from './users';
-import { departments } from './masters';
+import { departments, buildings, rooms } from './masters';
 import { attachments } from './attachments';
 
 export const equipmentNormals = pgTable('equipment_normals', {
@@ -19,9 +19,11 @@ export const equipmentBorrows = pgTable('equipment_borrows', {
   borrowerDepartmentId: integer('borrower_department_id').references(() => departments.id),
   borrowDate: date('borrow_date').notNull(),
   expectedReturnDate: date('expected_return_date'),
-  actualReturnDate: date('actual_return_date'),
-  reason: text('reason'),
-  createdBy: integer('created_by').references(() => users.id).notNull(),
+  actualReturnDate:    date('actual_return_date'),
+  borrowingBuildingId: integer('borrowing_building_id').references(() => buildings.id),
+  borrowingRoomId:     integer('borrowing_room_id').references(() => rooms.id),
+  reason:              text('reason'),
+  createdBy:           integer('created_by').references(() => users.id).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 

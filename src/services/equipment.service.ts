@@ -365,6 +365,8 @@ export const equipmentService = {
         borrowDate:          equipmentBorrows.borrowDate,
         expectedReturnDate:  equipmentBorrows.expectedReturnDate,
         borrowReason:        equipmentBorrows.reason,
+        borrowingBuildingId: equipmentBorrows.borrowingBuildingId,
+        borrowingRoomId:     equipmentBorrows.borrowingRoomId,
         // repair details
         repairReason:        equipmentRepairs.repairReason,
         repairStartDate:     equipmentRepairs.startDate,
@@ -421,7 +423,7 @@ export const equipmentService = {
           createdBy: `${log.firstName ?? ''} ${log.lastName ?? ''}`.trim(),
         };
         if (log.referenceTable === 'equipment_borrows') {
-          return { ...base, detail: { borrowerName: log.borrowerName, borrowDate: log.borrowDate, expectedReturnDate: log.expectedReturnDate, reason: log.borrowReason } };
+          return { ...base, detail: { borrowerName: log.borrowerName, borrowDate: log.borrowDate, expectedReturnDate: log.expectedReturnDate, borrowingBuildingId: log.borrowingBuildingId ?? null, borrowingRoomId: log.borrowingRoomId ?? null, reason: log.borrowReason } };
         }
         if (log.referenceTable === 'equipment_repairs') {
           return { ...base, detail: { repairReason: log.repairReason, startDate: log.repairStartDate, endDate: log.repairEndDate, repairCompany: log.repairCompany, cost: log.repairCost } };

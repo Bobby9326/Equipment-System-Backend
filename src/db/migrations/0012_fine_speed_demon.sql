@@ -1,0 +1,4 @@
+ALTER TABLE "equipment_borrows" ADD COLUMN "borrowing_building_id" integer;--> statement-breakpoint
+ALTER TABLE "equipment_borrows" ADD COLUMN "borrowing_room_id" integer;--> statement-breakpoint
+ALTER TABLE "equipment_borrows" ADD CONSTRAINT "equipment_borrows_borrowing_building_id_buildings_id_fk" FOREIGN KEY ("borrowing_building_id") REFERENCES "public"."buildings"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "equipment_borrows" ADD CONSTRAINT "equipment_borrows_borrowing_room_id_rooms_id_fk" FOREIGN KEY ("borrowing_room_id") REFERENCES "public"."rooms"("id") ON DELETE no action ON UPDATE no action;
