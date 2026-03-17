@@ -4,9 +4,29 @@ import { auditService } from './audit.service.js';
 import { projects, users } from '../db/schema/index.js';
 import { eq, sql, like, and, isNull, asc, desc, gte, lte } from 'drizzle-orm';
 
+// สร้างเลขโครงการ YYYYMMDDNN (10 หลัก)
+const generateProjectNumber = async (): Promise<string> => {
+  const now   = new Date();
+  const year  = now.getFullYear().toString();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day   = String(now.getDate()).padStart(2, '0');
+  const prefix = `${year}${month}${day}`;
+
+  // นับโครงการที่มี projectNumber ขึ้นต้นด้วย prefix นี้
+  const { sql: sqlFn } = await import('drizzle-orm');
+  const result = await db
+    .select({ count: sqlFn<number>`count(*)` })
+    .from(projects)
+    .where(sqlFn`${projects.projectNumber} LIKE ${prefix + '%'}`);
+
+  const seq = (Number(result[0].count) + 1).toString().padStart(2, '0');
+  return `${prefix}${seq}`;
+};
+
 const PROJECT_SELECT = {
   id:                  projects.id,
   uuid:                projects.uuid,
+  projectNumber:       projects.projectNumber,
   projectName:         projects.projectName,
   projectTypeId:       projects.projectTypeId,
   projectDate:         projects.projectDate,
@@ -90,8 +110,9 @@ export const projectsService = {
     return result[0] || null;
   },
 
-  create: async (data: Omit<typeof projects.$inferInsert, 'id' | 'uuid' | 'createdAt' | 'updatedAt'>) => {
-    const result = await db.insert(projects).values({ ...data, uuid: randomUUID() }).returning(PROJECT_SELECT);
+  create: async (data: Omit<typeof projects.$inferInsert, 'id' | 'uuid' | 'createdAt' | 'updatedAt' | 'projectNumber'>) => {
+    const projectNumber = await generateProjectNumber();
+    const result = await db.insert(projects).values({ ...data, uuid: randomUUID(), projectNumber }).returning(PROJECT_SELECT);
     return result[0];
   },
 
