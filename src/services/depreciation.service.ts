@@ -1,8 +1,6 @@
 import { db } from '../config/database.js';
-import { equipment, departments, acquisitionSources } from '../db/schema/index.js';
+import { equipment, equipmentTypes, departments, acquisitionSources } from '../db/schema/index.js';
 import { eq, and, lte, isNull, inArray } from 'drizzle-orm';
-
-const USEFUL_LIFE = 8;
 
 // ============================================================
 // DEPRECIATION CALCULATION (Straight-Line Method)
@@ -13,9 +11,10 @@ const calcDepreciation = (
   acquisitionDate: Date,
   periodStart: Date,
   periodEnd: Date,
-  usefulLife: number = USEFUL_LIFE
+  usefulLife: number = 8,
+  depPerYearOverride?: number
 ) => {
-  const depPerYear = price / usefulLife;
+  const depPerYear = depPerYearOverride ?? price / usefulLife;
   const depPerDay  = depPerYear / 365;
 
   // ยกมา = เสื่อมสะสมก่อนวัน periodStart
@@ -88,10 +87,13 @@ export const depreciationService = {
         price:               equipment.price,
         departmentName:      departments.name,
         acquisitionSource:   acquisitionSources.name,
+        usefulLife:          equipmentTypes.usefulLife,
+        depreciationRate:    equipmentTypes.depreciationRate,
       })
       .from(equipment)
       .leftJoin(departments,        eq(equipment.departmentId,        departments.id))
       .leftJoin(acquisitionSources, eq(equipment.acquisitionSourceId, acquisitionSources.id))
+      .leftJoin(equipmentTypes,     eq(equipment.equipmentTypeId,     equipmentTypes.id))
       .where(and(...conditions));
     // ─────────────────────────────────────────────────────────
 
@@ -102,14 +104,25 @@ export const depreciationService = {
       .map(r => {
         const price           = parseFloat(r.price!);
         const acquisitionDate = new Date(r.acquisitionDate!);
-        const dep             = calcDepreciation(price, acquisitionDate, periodStart, periodEnd);
+
+        // ใช้ usefulLife จาก equipmentTypes ถ้ามี ไม่งั้น default 8
+        const usefulLife      = r.usefulLife ?? 8;
+
+        // ถ้ามี depreciationRate → คำนวณ depPerYear จาก rate แทน
+        // depreciationRate คือ % ต่อปี เช่น 12.50 = 12.5%
+        const depPerYearOverride = r.depreciationRate
+          ? parseFloat((price * parseFloat(r.depreciationRate) / 100).toFixed(2))
+          : undefined;
+
+        const dep = calcDepreciation(price, acquisitionDate, periodStart, periodEnd, usefulLife, depPerYearOverride);
 
         return {
           equipmentNumber:       r.equipmentNumber,
           equipmentName:         r.equipmentName,
           acquisitionDate:       r.acquisitionDate,
           usefulAge:             calcUsefulAge(acquisitionDate, periodEnd),
-          usefulLife:            USEFUL_LIFE,
+          usefulLife,
+          depreciationRate:      r.depreciationRate ? parseFloat(r.depreciationRate) : null,
           price,
           acquisitionSource:     r.acquisitionSource ?? '-',
           depreciationPerYear:   dep.depreciationPerYear,

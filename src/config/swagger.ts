@@ -15,6 +15,7 @@ export const swaggerConfig = {
     { name: 'Projects',         description: 'Project management' },
     { name: 'MHESI',            description: 'MHESI number management' },
     { name: 'Reports',          description: 'Reports & depreciation calculation' },
+    { name: 'Users',            description: 'User management — admin only' },
     { name: 'Health',           description: 'Health check' },
   ],
   components: {
@@ -226,7 +227,38 @@ export const swaggerConfig = {
       },
     },
     '/api/equipment/stats': {
-      get: { tags: ['Equipment'], summary: 'Get equipment statistics', responses: { '200': { description: 'Success' } } },
+      get: {
+        tags: ['Equipment'],
+        summary: 'Get equipment statistics',
+        description: 'ดึงสถิติครุภัณฑ์ — byStatus แสดงครบ 5 สถานะเสมอ (count = 0 ถ้าไม่มี)',
+        responses: {
+          '200': {
+            description: 'Success',
+            content: {
+              'application/json': {
+                example: {
+                  success: true,
+                  data: {
+                    total: 21,
+                    byStatus: [
+                      { status: 'normal',      count: 20 },
+                      { status: 'borrowed',    count: 0  },
+                      { status: 'repair',      count: 1  },
+                      { status: 'unavailable', count: 0  },
+                      { status: 'disposed',    count: 0  },
+                    ],
+                    byDepartment: [
+                      { departmentId: 1, count: 3  },
+                      { departmentId: 2, count: 6  },
+                      { departmentId: 5, count: 12 },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     },
     '/api/equipment/code/{code}': {
       get: { tags: ['Equipment'], summary: 'Get equipment by equipmentCode', parameters: [{ name: 'code', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'Success' }, '403': { description: 'ไม่มีสิทธิ์' }, '404': { description: 'Not found' } } },
@@ -882,6 +914,120 @@ export const swaggerConfig = {
           '200': { description: 'Success — returns { details[], summary }' },
           '400': { description: 'startDate หรือ endDate is required' },
           '403': { description: 'ไม่มีสิทธิ์ดูข้อมูล department อื่น' },
+        },
+      },
+    },
+
+
+    // ==================== USERS (admin only) ====================
+
+    '/api/users': {
+      get: {
+        tags: ['Users'],
+        summary: 'Get all users',
+        description: '🔒 **admin เท่านั้น**',
+        parameters: [
+          { name: 'search',       in: 'query', schema: { type: 'string'  }, description: 'ค้นหาชื่อหรือ email' },
+          { name: 'role',         in: 'query', schema: { type: 'string', enum: ['admin', 'manager', 'user'] } },
+          { name: 'departmentId', in: 'query', schema: { type: 'integer' } },
+        ],
+        responses: {
+          '200': {
+            description: 'Success',
+            content: {
+              'application/json': {
+                example: {
+                  success: true,
+                  data: [
+                    {
+                      uuid:           '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+                      email:          'somchai@kmitl.ac.th',
+                      firstName:      'สมชาย',
+                      lastName:       'ใจดี',
+                      role:           'user',
+                      departmentId:   1,
+                      departmentName: 'ภาควิชาฟิสิกส์',
+                      createdAt:      '2026-03-17T10:00:00.000Z',
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          '403': { description: 'admin เท่านั้น' },
+        },
+      },
+      post: {
+        tags: ['Users'],
+        summary: 'Create user',
+        description: '🔒 **admin เท่านั้น** — user จะ login ด้วย Google OAuth ได้ทันทีที่ email ตรงกัน',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email', 'role'],
+                properties: {
+                  email:        { type: 'string', format: 'email', example: 'somchai@kmitl.ac.th' },
+                  firstName:    { type: 'string', example: 'สมชาย' },
+                  lastName:     { type: 'string', example: 'ใจดี' },
+                  role:         { type: 'string', enum: ['admin', 'manager', 'user'] },
+                  departmentId: { type: 'integer', description: 'null = ไม่สังกัด department' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': { description: 'Created' },
+          '400': { description: 'email ซ้ำ หรือ role ไม่ถูกต้อง' },
+          '403': { description: 'admin เท่านั้น' },
+        },
+      },
+    },
+
+    '/api/users/{uuid}': {
+      get: {
+        tags: ['Users'],
+        summary: 'Get user by UUID',
+        description: '🔒 **admin เท่านั้น**',
+        parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        responses: { '200': { description: 'Success' }, '404': { description: 'Not found' }, '403': { description: 'admin เท่านั้น' } },
+      },
+      put: {
+        tags: ['Users'],
+        summary: 'Update user',
+        description: '🔒 **admin เท่านั้น** — แก้ได้เฉพาะ firstName, lastName, role, departmentId',
+        parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  firstName:    { type: 'string' },
+                  lastName:     { type: 'string' },
+                  role:         { type: 'string', enum: ['admin', 'manager', 'user'] },
+                  departmentId: { type: 'integer', nullable: true },
+                },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'Updated' }, '404': { description: 'Not found' }, '403': { description: 'admin เท่านั้น' } },
+      },
+      delete: {
+        tags: ['Users'],
+        summary: 'Delete user (soft delete)',
+        description: '🔒 **admin เท่านั้น** — ลบตัวเองไม่ได้',
+        parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        responses: {
+          '200': { description: 'Deleted', content: { 'application/json': { example: { success: true, data: { uuid: '3fa85f64-...' } } } } },
+          '400': { description: 'ไม่สามารถลบ account ตัวเองได้' },
+          '403': { description: 'admin เท่านั้น' },
+          '404': { description: 'Not found' },
         },
       },
     },

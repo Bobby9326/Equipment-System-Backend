@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, integer, char } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, integer, char, decimal } from 'drizzle-orm/pg-core';
 
 export const departments = pgTable('departments', {
   id: serial('id').primaryKey(),
@@ -17,8 +17,10 @@ export const funds = pgTable('funds', {
 });
 
 export const equipmentTypes = pgTable('equipment_types', {
-  id: serial('id').primaryKey(),
-  name: varchar('name', { length: 255 }).notNull(),
+  id:               serial('id').primaryKey(),
+  name:             varchar('name', { length: 255 }).notNull(),
+  usefulLife:       integer('useful_life'),                              // อายุการใช้งาน (ปี)
+  depreciationRate: decimal('depreciation_rate', { precision: 5, scale: 2 }), // อัตราค่าเสื่อมราคา (%)
 });
 
 export const acquisitionSources = pgTable('acquisition_sources', {

@@ -8,8 +8,12 @@ import attachments from './attachments.routes.js';
 import auth from './auth.routes.js';
 import { authMiddleware } from '../middlewares/auth.js';
 import reports from './reports.routes.js';
+import usersRouter from './users.routes.js';
 
 const routes = new Hono();
+
+
+
 
 routes.use('/masters/*', authMiddleware);
 routes.use('/equipment/*', authMiddleware);
@@ -18,6 +22,7 @@ routes.use('/projects/*', authMiddleware);
 routes.use('/mhesi/*', authMiddleware);
 routes.use('/attachments/*', authMiddleware);
 routes.use('/reports/*', authMiddleware);
+routes.use('/users/*', authMiddleware);
 
 // API Routes
 routes.route('/masters', masters);
@@ -28,6 +33,7 @@ routes.route('/equipment-status', equipmentStatus);
 routes.route('/attachments', attachments);
 routes.route('/auth', auth);
 routes.route('/reports', reports);
+routes.route('/users', usersRouter);
 
 // Health check
 routes.get('/health', (c) => {
