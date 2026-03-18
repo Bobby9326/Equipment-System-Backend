@@ -172,7 +172,15 @@ export const equipmentService = {
         updatedAt:          equipment.updatedAt,
       })
       .from(equipment)
-      .where(eq(equipment.equipmentCode, equipmentCode));
+      .where(and(eq(equipment.equipmentCode, equipmentCode), isNull(equipment.deletedAt)));
+    return result[0] || null;
+  },
+
+  getByNumber: async (equipmentNumber: string) => {
+    const result = await db
+      .select({ uuid: equipment.uuid })
+      .from(equipment)
+      .where(and(eq(equipment.equipmentNumber, equipmentNumber), isNull(equipment.deletedAt)));
     return result[0] || null;
   },
 

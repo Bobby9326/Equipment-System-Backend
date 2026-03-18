@@ -113,9 +113,9 @@ export const equipmentController = {
         return errorResponse(c, 'ไม่มีสิทธิ์แก้ไขครุภัณฑ์ใน department อื่น', 403);
       }
 
-      if (body.equipmentCode) {
-        const dup = await equipmentService.getByCode(body.equipmentCode);
-        if (dup && dup.uuid !== uuid) return errorResponse(c, 'Equipment code already exists', 400);
+      if (body.equipmentNumber) {
+        const dup = await equipmentService.getByNumber(body.equipmentNumber);
+        if (dup && dup.uuid !== uuid) return errorResponse(c, 'Equipment number already exists', 400);
       }
 
       const data = await equipmentService.updateByUuid(uuid, body, user.uuid);

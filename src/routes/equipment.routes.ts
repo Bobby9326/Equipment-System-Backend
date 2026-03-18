@@ -13,8 +13,9 @@ equipment.post('/', equipmentController.create);
 equipment.put('/:uuid', equipmentController.update);
 equipment.delete('/:uuid', equipmentController.delete);
 
+// equipment.routes.ts
+equipment.post('/attachments', attachmentsController.bulkUploadForEquipment);
 equipment.post('/:uuid/attachments', attachmentsController.uploadForEquipment);
 equipment.get('/:uuid/attachments', attachmentsController.getByEquipmentId);
 equipment.delete('/:uuid/attachments/:attachmentId', attachmentsController.deleteById);
-
 export default equipment;

@@ -27,10 +27,9 @@ export const attachmentsController = {
   // GET /api/equipment/:uuid/attachments (เรียกผ่าน equipment.routes.ts)
   getByEquipmentId: async (c: Context) => {
     try {
-      const uuid = c.req.param('uuid')
-      const equipment = await equipmentService.getByUuid(uuid)
-      if (!equipment) return errorResponse(c, 'Equipment not found', 404)
-      const data = await attachmentsService.getByEquipmentId(equipment.id)
+      const uuid = c.req.param('uuid');
+      const data = await attachmentsService.getByEquipmentUuid(uuid);
+      if (data === null) return errorResponse(c, 'Equipment not found', 404);
       return successResponse(c, data, 'Attachments retrieved successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
@@ -66,6 +65,8 @@ export const attachmentsController = {
       if (!equipment) {
         return c.json({ success: false, message: 'Equipment not found' }, 404)
       }
+      const equipmentId = await attachmentsService.getEquipmentIdByUuid(uuid);
+      if (!equipmentId) return errorResponse(c, 'Equipment not found', 404);
       const body = await c.req.parseBody({ all: true }); // all: true รองรับหลายไฟล์
 
       // รองรับทั้ง files[] และ file
@@ -79,7 +80,7 @@ export const attachmentsController = {
 
       // upload ทุกไฟล์พร้อมกัน
       const results = await Promise.all(
-        files.map(file => attachmentsService.uploadForEquipment(file, equipment.id))
+        files.map(file => attachmentsService.uploadForEquipment(file, equipmentId!))
       );
 
       const message = results.length > 1
@@ -89,6 +90,29 @@ export const attachmentsController = {
       return successResponse(c, results, message, 201);
     } catch (error: any) {
       return errorResponse(c, error.message, 400);
+    }
+  },
+
+  // POST /api/equipment/attachments
+  // multipart/form-data: uuids (JSON array string) + files[]
+  bulkUploadForEquipment: async (c: Context) => {
+    try {
+      const body = await c.req.parseBody({ all: true });
+      const uuidsRaw = body['uuids'];
+      if (!uuidsRaw || typeof uuidsRaw !== 'string')
+        return errorResponse(c, 'uuids is required (JSON array string)', 400);
+      const uuids: string[] = JSON.parse(uuidsRaw);
+      if (!uuids.length) return errorResponse(c, 'uuids must not be empty', 400);
+
+      const filesRaw = body['files'];
+      const files: File[] = (Array.isArray(filesRaw) ? filesRaw : [filesRaw])
+        .filter((f): f is File => f instanceof File);
+      if (!files.length) return errorResponse(c, 'files is required', 400);
+
+      const result = await attachmentsService.bulkUploadForEquipment(files, uuids);
+      return successResponse(c, result, 'อัปโหลดและผูกไฟล์สำเร็จ', 201);
+    } catch (error: any) {
+      return errorResponse(c, error.message, 500);
     }
   },
 
@@ -131,16 +155,14 @@ export const attachmentsController = {
       const uuid         = c.req.param('uuid');
       const attachmentId = parseInt(c.req.param('attachmentId'));
 
-      // ตรวจว่า equipment มีอยู่จริง
-      const equip = await equipmentService.getByUuid(uuid);
-      if (!equip) return errorResponse(c, 'Equipment not found', 404);
+      const list = await attachmentsService.getByEquipmentUuid(uuid) ?? [];
+      if (!list.some(a => a.id === attachmentId))
+        return errorResponse(c, 'Attachment not found', 404);
 
-      // ตรวจว่า attachment นี้เป็นของ equipment นี้จริง
-      const attachments = await attachmentsService.getByEquipmentId(equip.id);
-      const exists = attachments.some(a => a.id === attachmentId);
-      if (!exists) return errorResponse(c, 'Attachment not found', 404);
-
-      const data = await attachmentsService.delete(attachmentId);
+      // ลบ junction + ลบไฟล์จริงถ้าไม่มี equipment อื่นใช้
+      const equipmentId = await attachmentsService.getEquipmentIdByUuid(uuid);
+      if (!equipmentId) return errorResponse(c, 'Equipment not found', 404);
+      await attachmentsService.deleteForEquipment(equipmentId, attachmentId);
       return successResponse(c, null, 'Attachment deleted successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
