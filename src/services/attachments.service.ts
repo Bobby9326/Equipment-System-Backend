@@ -2,6 +2,9 @@ import { db } from '../config/database.js';
 import { attachments, equipmentAttachments, equipment } from '../db/schema/index.js';
 import { eq, and, inArray, isNull } from 'drizzle-orm';
 import { storageService } from './storage.service.js';
+import { auditService } from './audit.service.js';
+
+const toFileUrl = (id: number) => `/api/attachments/${id}/file`;
 
 export const attachmentsService = {
   getAll: async () => {
@@ -9,8 +12,18 @@ export const attachmentsService = {
   },
 
   getById: async (id: number) => {
-    const result = await db.select().from(attachments).where(eq(attachments.id, id));
-    return result[0] || null;
+    const result = await db
+      .select({
+        id:         attachments.id,
+        fileName:   attachments.fileName,
+        filePath:   attachments.filePath,
+        fileType:   attachments.fileType,
+        uploadedAt: attachments.uploadedAt,
+      })
+      .from(attachments)
+      .where(eq(attachments.id, id));
+    if (!result[0]) return null;
+    return { ...result[0], fileUrl: toFileUrl(result[0].id) };
   },
 
   // upload ไฟล์ทั่วไป (repairs, disposals, mhesi — เอา id ไปใส่ใน FK)
@@ -25,7 +38,7 @@ export const attachmentsService = {
   },
 
   // upload + link กับ equipment ผ่าน junction table
-  uploadForEquipment: async (file: File, equipmentId: number) => {
+  uploadForEquipment: async (file: File, equipmentId: number, equipmentUuid?: string, userUuid?: string) => {
     const result = await storageService.upload(file, 'equipment');
     const [attachment] = await db.insert(attachments).values({
       fileName: result.fileName,
@@ -38,7 +51,21 @@ export const attachmentsService = {
       attachmentId: attachment.id,
     });
 
-    return attachment;
+    // log การแนบไฟล์
+    if (equipmentUuid && userUuid) {
+      try {
+        await auditService.log({
+          entity:     'equipment',
+          entityUuid: equipmentUuid,
+          action:     'update',
+          before:     {},
+          after:      { attachmentId: attachment.id, fileName: attachment.fileName, fileUrl: toFileUrl(attachment.id) },
+          userUuid,
+        });
+      } catch (_) {}
+    }
+
+    return { ...attachment, fileUrl: toFileUrl(attachment.id) };
   },
 
   // ดึงไฟล์ทั้งหมดของ equipment — รับ uuid หรือ id ก็ได้
@@ -53,7 +80,8 @@ export const attachmentsService = {
       })
       .from(equipmentAttachments)
       .innerJoin(attachments, eq(equipmentAttachments.attachmentId, attachments.id))
-      .where(eq(equipmentAttachments.equipmentId, equipmentId));
+      .where(eq(equipmentAttachments.equipmentId, equipmentId))
+      .then(rows => rows.map(r => ({ ...r, fileUrl: toFileUrl(r.id) })));
   },
 
   getByEquipmentUuid: async (uuid: string) => {
@@ -72,11 +100,12 @@ export const attachmentsService = {
       })
       .from(equipmentAttachments)
       .innerJoin(attachments, eq(equipmentAttachments.attachmentId, attachments.id))
-      .where(eq(equipmentAttachments.equipmentId, eq_[0].id));
+      .where(eq(equipmentAttachments.equipmentId, eq_[0].id))
+      .then(rows => rows.map(r => ({ ...r, fileUrl: toFileUrl(r.id) })));
   },
 
   // อัปโหลดหลายไฟล์ครั้งเดียว ผูกกับหลาย uuid — ไฟล์จริงบันทึกแค่ครั้งเดียว
-  bulkUploadForEquipment: async (files: File[], uuids: string[]) => {
+  bulkUploadForEquipment: async (files: File[], uuids: string[], userUuid?: string) => {
     const equipmentList = await db
       .select({ id: equipment.id, uuid: equipment.uuid })
       .from(equipment)
@@ -106,6 +135,22 @@ export const attachmentsService = {
       uploadedIds.map(attachmentId => ({ equipmentId: e.id, attachmentId }))
     );
     await db.insert(equipmentAttachments).values(junctionRows).onConflictDoNothing();
+
+    // log การแนบไฟล์ให้ทุก uuid
+    if (userUuid) {
+      try {
+        await Promise.all(uuids.map(uuid =>
+          auditService.log({
+            entity:     'equipment',
+            entityUuid: uuid,
+            action:     'update',
+            before:     {},
+            after:      { uploadedFiles: uploadedIds.length, fileUrls: uploadedIds.map(toFileUrl) },
+            userUuid,
+          })
+        ));
+      } catch (_) {}
+    }
 
     return {
       uploadedFiles:   uploadedIds.length,
@@ -150,7 +195,7 @@ export const attachmentsService = {
 
   create: async (data: typeof attachments.$inferInsert) => {
     const result = await db.insert(attachments).values(data).returning();
-    return result[0];
+    return { ...result[0], fileUrl: toFileUrl(result[0].id) };
   },
 
   update: async (id: number, data: Partial<typeof attachments.$inferInsert>) => {

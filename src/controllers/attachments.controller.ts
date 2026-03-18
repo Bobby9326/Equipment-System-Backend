@@ -1,4 +1,7 @@
 import { Context } from 'hono';
+import { readFile } from 'fs/promises';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { successResponse, errorResponse } from '../utils/response.js';
 import { attachmentsService } from '../services/attachments.service.js';
 import { equipmentService } from '../services/equipment.service.js';
@@ -13,12 +16,37 @@ export const attachmentsController = {
     }
   },
 
+  // GET /api/attachments/:id         → metadata เท่านั้น
   getById: async (c: Context) => {
     try {
       const id = parseInt(c.req.param('id'));
       const data = await attachmentsService.getById(id);
       if (!data) return errorResponse(c, 'Attachment not found', 404);
       return successResponse(c, data, 'Attachment retrieved successfully');
+    } catch (error: any) {
+      return errorResponse(c, error.message, 500);
+    }
+  },
+
+  // GET /api/attachments/:id/file     → ส่งไฟล์จริงออกไป (stream)
+  download: async (c: Context) => {
+    try {
+      const id = parseInt(c.req.param('id'));
+      const data = await attachmentsService.getById(id);
+      if (!data) return errorResponse(c, 'Attachment not found', 404);
+
+      // แปลง filePath (/uploads/...) → path จริงในระบบ
+      const localPath = join('.', data.filePath);
+      if (!existsSync(localPath)) return errorResponse(c, 'File not found on disk', 404);
+
+      const buffer = await readFile(localPath);
+
+      c.header('Content-Type', data.fileType ?? 'application/octet-stream');
+      c.header('Content-Disposition', `inline; filename="${data.fileName ?? 'file'}"`); 
+      c.header('Content-Length', String(buffer.length));
+      c.header('Cache-Control', 'private, max-age=3600');
+
+      return c.body(buffer);
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
     }
@@ -80,7 +108,7 @@ export const attachmentsController = {
 
       // upload ทุกไฟล์พร้อมกัน
       const results = await Promise.all(
-        files.map(file => attachmentsService.uploadForEquipment(file, equipmentId!))
+        files.map(file => attachmentsService.uploadForEquipment(file, equipmentId!, uuid, c.get('user')?.uuid))
       );
 
       const message = results.length > 1
@@ -109,7 +137,7 @@ export const attachmentsController = {
         .filter((f): f is File => f instanceof File);
       if (!files.length) return errorResponse(c, 'files is required', 400);
 
-      const result = await attachmentsService.bulkUploadForEquipment(files, uuids);
+      const result = await attachmentsService.bulkUploadForEquipment(files, uuids, c.get('user')?.uuid);
       return successResponse(c, result, 'อัปโหลดและผูกไฟล์สำเร็จ', 201);
     } catch (error: any) {
       return errorResponse(c, error.message, 500);

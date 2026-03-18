@@ -312,11 +312,49 @@ export const swaggerConfig = {
         responses: { '200': { description: 'Deleted' }, '403': { description: 'ไม่มีสิทธิ์' }, '404': { description: 'Not found' } },
       },
     },
+    '/api/equipment/attachments': {
+      post: {
+        tags: ['Equipment'],
+        summary: '⭐ Upload files for multiple equipment (bulk)',
+        description: 'อัปโหลดไฟล์ครั้งเดียว ผูกกับทุก uuid — ไฟล์จริงบันทึกแค่ครั้งเดียว\n\n**ใช้ในหน้า: เพิ่มครุภัณฑ์**\n\nส่ง uuids เป็น JSON string เช่น `["uuid-1","uuid-2"]`',
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                required: ['uuids', 'files'],
+                properties: {
+                  uuids: { type: 'string', description: 'JSON array ของ uuid เช่น ["uuid-1","uuid-2"]', example: '["3fa85f64-...","b1c2d3e4-..."]' },
+                  files: { type: 'array', items: { type: 'string', format: 'binary' }, description: 'ไฟล์ที่ต้องการอัปโหลด (jpg/png/webp · max 10MB)' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Success',
+            content: {
+              'application/json': {
+                example: {
+                  success: true,
+                  data: { uploadedFiles: 3, linkedEquipment: 5, totalLinks: 15 },
+                },
+              },
+            },
+          },
+          '400': { description: 'uuids/files ขาดหาย หรือไฟล์ไม่รองรับ' },
+          '404': { description: 'ไม่พบครุภัณฑ์บาง uuid' },
+        },
+      },
+    },
+
     '/api/equipment/{uuid}/attachments': {
       post: {
         tags: ['Equipment'],
-        summary: 'Upload attachment(s) to equipment',
-        description: 'รองรับทั้งไฟล์เดียว (field: `file`) และหลายไฟล์พร้อมกัน (field: `files`)\nรองรับ: jpg, png, webp · ขนาดสูงสุด 10 MB',
+        summary: 'Upload attachment(s) to single equipment',
+        description: 'อัปโหลดไฟล์ให้ครุภัณฑ์อันเดียว รองรับหลายไฟล์พร้อมกัน\n\n**ใช้ในหน้า: ข้อมูลครุภัณฑ์**\n\nรองรับ field: `files[]` หรือ `file`',
         parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
         requestBody: {
           required: true,
@@ -325,15 +363,15 @@ export const swaggerConfig = {
               schema: {
                 type: 'object',
                 properties: {
-                  file:  { type: 'string', format: 'binary', description: 'ไฟล์เดียว' },
                   files: { type: 'array', items: { type: 'string', format: 'binary' }, description: 'หลายไฟล์' },
+                  file:  { type: 'string', format: 'binary', description: 'ไฟล์เดียว' },
                 },
               },
             },
           },
         },
         responses: {
-          '201': { description: 'Uploaded — returns array of attachment objects' },
+          '201': { description: 'Uploaded — returns attachment object(s)' },
           '400': { description: 'ไม่มีไฟล์ / ประเภทไฟล์ไม่รองรับ' },
           '404': { description: 'Equipment not found' },
         },
@@ -345,10 +383,12 @@ export const swaggerConfig = {
         responses: { '200': { description: 'Success' }, '404': { description: 'Equipment not found' } },
       },
     },
+
     '/api/equipment/{uuid}/attachments/{attachmentId}': {
       delete: {
         tags: ['Equipment'],
         summary: 'Delete attachment from equipment',
+        description: 'ลบ junction row — ถ้าไม่มี equipment อื่นใช้ไฟล์นี้อยู่จะลบไฟล์จริงด้วย',
         parameters: [
           { name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
           { name: 'attachmentId', in: 'path', required: true, schema: { type: 'integer' } },
