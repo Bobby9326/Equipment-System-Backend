@@ -381,6 +381,7 @@ export const equipmentService = {
         repairEndDate:       equipmentRepairs.endDate,
         repairCompany:       equipmentRepairs.repairCompany,
         repairCost:          equipmentRepairs.cost,
+        repairAttachmentId:  equipmentRepairs.attachmentId,
         // unavailable details
         unavailableReason:   equipmentUnavailable.reason,
         // disposal details
@@ -389,6 +390,7 @@ export const equipmentService = {
         disposalApprovedBy:  equipmentDisposals.approvedBy,
         disposalCost:        equipmentDisposals.cost,
         disposalReason:      equipmentDisposals.reason,
+        disposalAttachmentId:equipmentDisposals.attachmentId,
       })
       .from(equipmentStatusLogs)
       .leftJoin(users, eq(equipmentStatusLogs.createdBy, users.id))
@@ -398,7 +400,29 @@ export const equipmentService = {
       .leftJoin(equipmentDisposals,  and(eq(equipmentStatusLogs.referenceTable, 'equipment_disposals'),  eq(equipmentStatusLogs.referenceId, equipmentDisposals.id)))
       .where(eq(equipmentStatusLogs.equipmentId, eqRow[0].id));
 
-    // 2. ประวัติแก้ไขข้อมูล
+    // 2. ประวัติแนบไฟล์
+    let attachmentLogs: any[] = [];
+    try {
+      attachmentLogs = await db
+        .select({
+          type:      sql<string>`'attachment_add'`,
+          status:    sql<null>`null`,
+          remark:    sql<null>`null`,
+          before:    sql<null>`null`,
+          after:     auditLogs.after,
+          createdAt: auditLogs.createdAt,
+          firstName: users.firstName,
+          lastName:  users.lastName,
+        })
+        .from(auditLogs)
+        .leftJoin(users, eq(auditLogs.changedBy, users.id))
+        .where(and(
+          eq(auditLogs.entity,     'equipment_attachment'),
+          eq(auditLogs.entityUuid, equipmentUuid)
+        ));
+    } catch (_) {}
+
+    // 3. ประวัติแก้ไขข้อมูล
     const editLogs = await db
       .select({
         type:      sql<string>`'edit'`,
@@ -418,7 +442,7 @@ export const equipmentService = {
       ));
 
     // 3. รวม + เรียงตาม createdAt ล่าสุดก่อน
-    return [...statusLogs, ...editLogs]
+    return [...statusLogs, ...attachmentLogs, ...editLogs]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .map((log: any) => {
         const base = {
@@ -434,13 +458,16 @@ export const equipmentService = {
           return { ...base, detail: { borrowerName: log.borrowerName, borrowDate: log.borrowDate, expectedReturnDate: log.expectedReturnDate, borrowingBuildingId: log.borrowingBuildingId ?? null, borrowingRoomId: log.borrowingRoomId ?? null, reason: log.borrowReason } };
         }
         if (log.referenceTable === 'equipment_repairs') {
-          return { ...base, detail: { repairReason: log.repairReason, startDate: log.repairStartDate, endDate: log.repairEndDate, repairCompany: log.repairCompany, cost: log.repairCost } };
+          return { ...base, detail: { repairReason: log.repairReason, startDate: log.repairStartDate, endDate: log.repairEndDate, repairCompany: log.repairCompany, cost: log.repairCost, attachmentId: log.repairAttachmentId ?? null, fileUrl: log.repairAttachmentId ? `/api/attachments/${log.repairAttachmentId}/file` : null } };
         }
         if (log.referenceTable === 'equipment_unavailable') {
           return { ...base, detail: { reason: log.unavailableReason } };
         }
         if (log.referenceTable === 'equipment_disposals') {
-          return { ...base, detail: { disposalDate: log.disposalDate, disposalMethod: log.disposalMethod, approvedBy: log.disposalApprovedBy, disposalCost: log.disposalCost, reason: log.disposalReason } };
+          return { ...base, detail: { disposalDate: log.disposalDate, disposalMethod: log.disposalMethod, approvedBy: log.disposalApprovedBy, disposalCost: log.disposalCost, reason: log.disposalReason, attachmentId: log.disposalAttachmentId ?? null, fileUrl: log.disposalAttachmentId ? `/api/attachments/${log.disposalAttachmentId}/file` : null } };
+        }
+        if (log.type === 'attachment_add') {
+          return { ...base, detail: log.after };
         }
         return base;
       });
