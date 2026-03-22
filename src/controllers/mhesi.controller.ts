@@ -10,6 +10,7 @@ export const mhesiController = {
       const search        = c.req.query('search');
       const projectId     = c.req.query('projectId');
       const faculty       = c.req.query('faculty');
+      const role          = c.req.query('role');
       const planId        = c.req.query('planId');
       const amountMin     = c.req.query('amountMin');
       const amountMax     = c.req.query('amountMax');
@@ -24,6 +25,7 @@ export const mhesiController = {
         search,
         projectId:    projectId    ? parseInt(projectId)    : undefined,
         faculty,
+        role,
         planId:        planId        ? parseInt(planId)        : undefined,
         amountMin:     amountMin     ? parseFloat(amountMin)   : undefined,
         amountMax:     amountMax     ? parseFloat(amountMax)   : undefined,

@@ -27,7 +27,7 @@ export const changeStatusController = {
       if (!newStatus)
         return errorResponse(c, 'newStatus is required', 400);
 
-      const validStatuses = ['normal', 'borrowed', 'repair', 'unavailable', 'disposed'];
+      const validStatuses = ['pending', 'normal', 'borrowed', 'repair', 'unavailable', 'disposed'];
       if (!validStatuses.includes(newStatus))
         return errorResponse(c, `newStatus must be one of: ${validStatuses.join(', ')}`, 400);
 

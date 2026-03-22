@@ -7,6 +7,7 @@ export const mhesiNumbers = pgTable('mhesi_numbers', {
   id:           serial('id').primaryKey(),
   uuid:         uuid('uuid').unique().notNull(),
   mhesiNumber:  varchar('mhesi_number', { length: 50 }).notNull(),
+  role:         varchar('role', { length: 50 }), // 'planning'|'procurement'|'contract'|'receiving'|'other'
   faculty:      varchar('faculty', { length: 255 }),
   departmentId: integer('department_id').references(() => departments.id),
   planId:       integer('plan_id').references(() => planSections.id),

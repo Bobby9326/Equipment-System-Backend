@@ -8,6 +8,7 @@ import { eq, like, and, isNull, or, sql, asc, desc, gte, lte } from 'drizzle-orm
 const MHESI_SELECT = {
   uuid:          mhesiNumbers.uuid,
   mhesiNumber:   mhesiNumbers.mhesiNumber,
+  role:          mhesiNumbers.role,
   departmentId:  mhesiNumbers.departmentId,
   faculty:       mhesiNumbers.faculty,
   planId:        mhesiNumbers.planId,
@@ -27,6 +28,7 @@ export const mhesiService = {
     projectId?: number;
     departmentId?: number;
     faculty?: string;
+    role?: string;    // 'planning'|'procurement'|'contract'|'receiving'|'other'
     planId?: number;
     amountMin?: number;
     amountMax?: number;
@@ -54,6 +56,7 @@ export const mhesiService = {
     if (filters?.projectId)    conditions.push(eq(mhesiNumbers.projectId,    filters.projectId));
     if (filters?.departmentId) conditions.push(eq(mhesiNumbers.departmentId, filters.departmentId));
     if (filters?.faculty) conditions.push(eq(mhesiNumbers.faculty, filters.faculty));
+    if (filters?.role)    conditions.push(eq(mhesiNumbers.role, filters.role));
     if (filters?.planId)        conditions.push(eq(mhesiNumbers.planId,        filters.planId));
     if (filters?.amountMin !== undefined) conditions.push(gte(mhesiNumbers.amount, String(filters.amountMin)));
     if (filters?.amountMax !== undefined) conditions.push(lte(mhesiNumbers.amount, String(filters.amountMax)));

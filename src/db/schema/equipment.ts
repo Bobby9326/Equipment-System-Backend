@@ -9,6 +9,7 @@ import {
   rooms,
 } from './masters';
 import { projects } from './projects';
+import { mhesiNumbers } from './mhesi';
 import { attachments } from './attachments';
 
 export const equipment = pgTable('equipment', {
@@ -31,8 +32,9 @@ export const equipment = pgTable('equipment', {
   sizeDetail: text('size_detail'),
   buildingId: integer("building_id").references(() => buildings.id),
   roomId: integer('room_id').references(() => rooms.id),
-  projectId: integer('project_id').references(() => projects.id),
-  status: varchar('status', { length: 50 }).default('normal'),
+  projectId:        integer('project_id').references(() => projects.id),
+  receivingMhesiId: integer('receiving_mhesi_id').references(() => mhesiNumbers.id),
+  status:           varchar('status', { length: 50 }).default('pending'), // pending|normal|borrowed|repair|unavailable|disposed
   note: text('note'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

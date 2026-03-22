@@ -5,11 +5,15 @@ import { departments, buildings, rooms } from './masters';
 import { attachments } from './attachments';
 
 export const equipmentNormals = pgTable('equipment_normals', {
-  id: serial('id').primaryKey(),
-  equipmentId: integer('equipment_id').references(() => equipment.id).notNull(),
-  reason: text('reason'),
-  createdBy: integer('created_by').references(() => users.id).notNull(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
+  id:            serial('id').primaryKey(),
+  equipmentId:   integer('equipment_id').references(() => equipment.id).notNull(),
+  reason:        text('reason'),
+  // กรณี pending → normal (เบิกจ่าย)
+  disbursedTo:   varchar('disbursed_to', { length: 255 }),
+  disbursedDate: date('disbursed_date'),
+  roomId:        integer('room_id').references(() => rooms.id),
+  createdBy:     integer('created_by').references(() => users.id).notNull(),
+  createdAt:     timestamp('created_at').defaultNow().notNull(),
 });
 
 export const equipmentBorrows = pgTable('equipment_borrows', {
@@ -65,7 +69,7 @@ export const equipmentDisposals = pgTable('equipment_disposals', {
 export const equipmentStatusLogs = pgTable('equipment_status_logs', {
   id: serial('id').primaryKey(),
   equipmentId: integer('equipment_id').references(() => equipment.id).notNull(),
-  status: varchar('status', { length: 50 }).notNull(), // 'normal' | 'borrowed' | 'repair' | 'unavailable' | 'disposed'
+  status: varchar('status', { length: 50 }).notNull(), // 'pending' | 'normal' | 'borrowed' | 'repair' | 'unavailable' | 'disposed'
   referenceTable: varchar('reference_table', { length: 100 }),
   referenceId: integer('reference_id'),
   remark: text('remark'),

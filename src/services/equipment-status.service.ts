@@ -16,9 +16,10 @@ import { BusinessError } from '../middlewares/error.js';
 // CHANGE STATUS
 // ============================================================
 
-type NewStatus = 'normal' | 'borrowed' | 'repair' | 'unavailable' | 'disposed';
+type NewStatus = 'pending' | 'normal' | 'borrowed' | 'repair' | 'unavailable' | 'disposed';
 
-const STATUS_REFERENCE_TABLE: Record<NewStatus, string> = {
+const STATUS_REFERENCE_TABLE: Record<NewStatus, string | null> = {
+  pending:     null,
   normal:      'equipment_normals',
   borrowed:    'equipment_borrows',
   repair:      'equipment_repairs',
@@ -26,13 +27,13 @@ const STATUS_REFERENCE_TABLE: Record<NewStatus, string> = {
   disposed:    'equipment_disposals',
 };
 
-// สถานะต้นทางที่เปลี่ยนไปยัง newStatus ไม่ได้
 const BLOCKED_TRANSITIONS: Record<NewStatus, NewStatus[]> = {
+  pending:     ['disposed'],
   normal:      ['disposed'],
   borrowed:    ['disposed'],
   repair:      ['disposed'],
   unavailable: ['disposed'],
-  disposed:    ['disposed'],
+  disposed:    ['pending', 'normal', 'borrowed', 'repair', 'unavailable', 'disposed'],
 };
 
 export const changeStatusService = {
@@ -45,7 +46,6 @@ export const changeStatusService = {
     const { equipmentUuids, newStatus, data, userUuid } = params;
     const today = new Date().toISOString().split('T')[0];
 
-    // 1. resolve userUuid + equipmentUuids → ids ในครั้งเดียว
     const [userResult, equipmentList] = await Promise.all([
       db.select({ id: users.id }).from(users).where(eq(users.uuid, userUuid)),
       db
@@ -59,13 +59,12 @@ export const changeStatusService = {
 
     if (equipmentList.length !== equipmentUuids.length) {
       const foundUuids = equipmentList.map((e) => e.uuid);
-      const notFound = equipmentUuids.filter((uuid) => !foundUuids.includes(uuid));
+      const notFound   = equipmentUuids.filter((uuid) => !foundUuids.includes(uuid));
       throw new BusinessError(`ไม่พบครุภัณฑ์ uuid: ${notFound.join(', ')}`);
     }
 
     for (const e of equipmentList) {
       const current = e.status as NewStatus;
-
       if (BLOCKED_TRANSITIONS[newStatus].includes(current)) {
         throw new BusinessError(
           `ครุภัณฑ์ ${e.equipmentCode} สถานะ "${current}" ไม่สามารถเปลี่ยนเป็น "${newStatus}" ได้`
@@ -76,7 +75,6 @@ export const changeStatusService = {
       }
     }
 
-    // 3. Transaction
     return await db.transaction(async (tx) => {
       const results: any[] = [];
 
@@ -90,7 +88,7 @@ export const changeStatusService = {
             .set({ actualReturnDate: today })
             .where(and(
               eq(equipmentBorrows.equipmentId, e.id),
-              isNull(equipmentBorrows.actualReturnDate)
+              isNull(equipmentBorrows.actualReturnDate),
             ));
         }
         if (current === 'repair') {
@@ -99,7 +97,7 @@ export const changeStatusService = {
             .set({ actualEndDate: today })
             .where(and(
               eq(equipmentRepairs.equipmentId, e.id),
-              isNull(equipmentRepairs.actualEndDate)
+              isNull(equipmentRepairs.actualEndDate),
             ));
         }
 
@@ -107,28 +105,48 @@ export const changeStatusService = {
         let newRecord: any;
 
         if (newStatus === 'normal') {
-          const [record] = await tx
-            .insert(equipmentNormals)
-            .values({ equipmentId: e.id, reason: data.reason, createdBy: userId })
-            .returning();
-          newRecord = record;
+          if (current === 'pending') {
+            // ✅ pending → normal = เบิกจ่าย — ต้องการ disbursedTo และ disbursedDate
+            if (!data.disbursedTo)   throw new BusinessError('disbursedTo is required');
+            if (!data.disbursedDate) throw new BusinessError('disbursedDate is required');
+
+            const [record] = await tx
+              .insert(equipmentNormals)
+              .values({
+                equipmentId:   e.id,
+                disbursedTo:   data.disbursedTo,
+                disbursedDate: data.disbursedDate,
+                roomId:        data.roomId   ?? null,
+                reason:        data.reason   ?? null,
+                createdBy:     userId,
+              })
+              .returning();
+            newRecord = record;
+          } else {
+            // normal จากสถานะอื่น (คืนจากยืม/ซ่อม)
+            const [record] = await tx
+              .insert(equipmentNormals)
+              .values({ equipmentId: e.id, reason: data.reason ?? null, createdBy: userId })
+              .returning();
+            newRecord = record;
+          }
         }
 
         if (newStatus === 'borrowed') {
           if (!data.borrowerName) throw new BusinessError('borrowerName is required');
-          if (!data.borrowDate) throw new BusinessError('borrowDate is required');
+          if (!data.borrowDate)   throw new BusinessError('borrowDate is required');
           const [record] = await tx
             .insert(equipmentBorrows)
             .values({
-              equipmentId: e.id,
-              borrowerName: data.borrowerName,
-              borrowerDepartmentId: data.borrowerDepartmentId,
-              borrowDate: data.borrowDate,
-              expectedReturnDate:  data.expectedReturnDate,
-              borrowingBuildingId: data.borrowingBuildingId,
-              borrowingRoomId:     data.borrowingRoomId,
-              reason:              data.reason,
-              createdBy: userId,
+              equipmentId:          e.id,
+              borrowerName:         data.borrowerName,
+              borrowerDepartmentId: data.borrowerDepartmentId ?? null,
+              borrowDate:           data.borrowDate,
+              expectedReturnDate:   data.expectedReturnDate   ?? null,
+              borrowingBuildingId:  data.borrowingBuildingId  ?? null,
+              borrowingRoomId:      data.borrowingRoomId      ?? null,
+              reason:               data.reason               ?? null,
+              createdBy:            userId,
             })
             .returning();
           newRecord = record;
@@ -136,18 +154,18 @@ export const changeStatusService = {
 
         if (newStatus === 'repair') {
           if (!data.repairReason) throw new BusinessError('repairReason is required');
-          if (!data.startDate) throw new BusinessError('startDate is required');
+          if (!data.startDate)    throw new BusinessError('startDate is required');
           const [record] = await tx
             .insert(equipmentRepairs)
             .values({
-              equipmentId: e.id,
-              repairReason: data.repairReason,
-              repairCompany: data.repairCompany,
-              cost: data.cost,
-              startDate: data.startDate,
-              endDate: data.endDate,
-              attachmentId: data.attachmentId,
-              createdBy: userId,
+              equipmentId:   e.id,
+              repairReason:  data.repairReason,
+              repairCompany: data.repairCompany ?? null,
+              cost:          data.cost          ?? null,
+              startDate:     data.startDate,
+              endDate:       data.endDate        ?? null,
+              attachmentId:  data.attachmentId   ?? null,
+              createdBy:     userId,
             })
             .returning();
           newRecord = record;
@@ -167,33 +185,49 @@ export const changeStatusService = {
           const [record] = await tx
             .insert(equipmentDisposals)
             .values({
-              equipmentId: e.id,
-              disposalDate: data.disposalDate,
-              disposalMethod: data.disposalMethod,
-              cost: data.cost,
-              approvedBy: data.approvedBy,
-              reason: data.reason,
-              attachmentId: data.attachmentId,
-              createdBy: userId,
+              equipmentId:    e.id,
+              disposalDate:   data.disposalDate,
+              disposalMethod: data.disposalMethod ?? null,
+              cost:           data.cost           ?? null,
+              approvedBy:     data.approvedBy     ?? null,
+              reason:         data.reason         ?? null,
+              attachmentId:   data.attachmentId   ?? null,
+              createdBy:      userId,
             })
             .returning();
           newRecord = record;
         }
 
-        // --- อัปเดต status ครุภัณฑ์ ---
+        // --- อัปเดต equipment ---
+        // ✅ แก้: ตอน pending→normal อัปเดต departmentId, buildingId, roomId ด้วย
+        // ✅ แก้: ตอนอื่นๆ อัปเดตเฉพาะ status
+        const equipmentUpdate: Record<string, any> = {
+          status:    newStatus,
+          updatedAt: new Date(),
+        };
+
+        if (newStatus === 'normal' && current === 'pending') {
+          // เบิกจ่าย — บันทึกที่ตั้งปัจจุบันลง equipment
+          if (data.departmentId != null) equipmentUpdate.departmentId = data.departmentId;
+          if (data.buildingId   != null) equipmentUpdate.buildingId   = data.buildingId;
+          if (data.roomId       != null) equipmentUpdate.roomId       = data.roomId;
+        }
+
         await tx
           .update(equipment)
-          .set({ status: newStatus, updatedAt: new Date() })
+          .set(equipmentUpdate)
           .where(eq(equipment.id, e.id));
 
-        // --- บันทึก log ---
+        // --- บันทึก status log ---
+        const referenceTable = STATUS_REFERENCE_TABLE[newStatus];
+
         await tx.insert(equipmentStatusLogs).values({
-          equipmentId: e.id,
-          status: newStatus,
-          referenceTable: STATUS_REFERENCE_TABLE[newStatus],
-          referenceId: newRecord?.id,
-          remark: data.remark,
-          createdBy: userId,
+          equipmentId:    e.id,
+          status:         newStatus,
+          referenceTable,
+          referenceId:    newRecord?.id ?? null,
+          remark:         data.remark   ?? null,
+          createdBy:      userId,
         });
 
         results.push({ equipmentUuid: e.uuid, newStatus, referenceId: newRecord?.id });
@@ -206,10 +240,8 @@ export const changeStatusService = {
 
 // ============================================================
 // INDIVIDUAL STATUS TABLES — GET / UPDATE / DELETE เท่านั้น
-// (ไม่มี create เพราะสร้างผ่าน changeStatus แทน)
 // ============================================================
 
-// helper: แปลง equipment uuid → id
 const resolveEquipmentId = async (uuid: string): Promise<number> => {
   const result = await db
     .select({ id: equipment.id })
@@ -225,6 +257,9 @@ export const equipmentNormalsService = {
       .select({
         equipmentUuid:   equipment.uuid,
         equipmentNumber: equipment.equipmentNumber,
+        disbursedTo:          equipmentNormals.disbursedTo,
+        disbursedDate:        equipmentNormals.disbursedDate,
+        roomId:               equipmentNormals.roomId,
         reason:               equipmentNormals.reason,
         createdBy:            users.firstName,
         createdAt:            equipmentNormals.createdAt,
@@ -239,6 +274,9 @@ export const equipmentNormalsService = {
       .select({
         equipmentUuid:   equipment.uuid,
         equipmentNumber: equipment.equipmentNumber,
+        disbursedTo:          equipmentNormals.disbursedTo,
+        disbursedDate:        equipmentNormals.disbursedDate,
+        roomId:               equipmentNormals.roomId,
         reason:               equipmentNormals.reason,
         createdBy:            users.firstName,
         createdAt:            equipmentNormals.createdAt,
@@ -254,6 +292,9 @@ export const equipmentNormalsService = {
       .select({
         equipmentUuid:   equipment.uuid,
         equipmentNumber: equipment.equipmentNumber,
+        disbursedTo:          equipmentNormals.disbursedTo,
+        disbursedDate:        equipmentNormals.disbursedDate,
+        roomId:               equipmentNormals.roomId,
         reason:               equipmentNormals.reason,
         createdBy:            users.firstName,
         createdAt:            equipmentNormals.createdAt,
@@ -280,8 +321,8 @@ export const equipmentBorrowsService = {
   getAll: async () =>
     db
       .select({
-        equipmentUuid:   equipment.uuid,
-        equipmentNumber: equipment.equipmentNumber,
+        equipmentUuid:        equipment.uuid,
+        equipmentNumber:      equipment.equipmentNumber,
         borrowerName:         equipmentBorrows.borrowerName,
         borrowerDepartmentId: equipmentBorrows.borrowerDepartmentId,
         borrowDate:           equipmentBorrows.borrowDate,
@@ -301,8 +342,8 @@ export const equipmentBorrowsService = {
     const equipmentId = await resolveEquipmentId(uuid);
     return db
       .select({
-        equipmentUuid:   equipment.uuid,
-        equipmentNumber: equipment.equipmentNumber,
+        equipmentUuid:        equipment.uuid,
+        equipmentNumber:      equipment.equipmentNumber,
         borrowerName:         equipmentBorrows.borrowerName,
         borrowerDepartmentId: equipmentBorrows.borrowerDepartmentId,
         borrowDate:           equipmentBorrows.borrowDate,
@@ -323,8 +364,8 @@ export const equipmentBorrowsService = {
   getById: async (id: number) => {
     const result = await db
       .select({
-        equipmentUuid:   equipment.uuid,
-        equipmentNumber: equipment.equipmentNumber,
+        equipmentUuid:        equipment.uuid,
+        equipmentNumber:      equipment.equipmentNumber,
         borrowerName:         equipmentBorrows.borrowerName,
         borrowerDepartmentId: equipmentBorrows.borrowerDepartmentId,
         borrowDate:           equipmentBorrows.borrowDate,
@@ -360,15 +401,15 @@ export const equipmentRepairsService = {
       .select({
         equipmentUuid:   equipment.uuid,
         equipmentNumber: equipment.equipmentNumber,
-        repairReason:         equipmentRepairs.repairReason,
-        repairCompany:        equipmentRepairs.repairCompany,
-        cost:                 equipmentRepairs.cost,
-        startDate:            equipmentRepairs.startDate,
-        endDate:              equipmentRepairs.endDate,
-        actualEndDate:        equipmentRepairs.actualEndDate,
-        attachmentId:         equipmentRepairs.attachmentId,
-        createdBy:            users.firstName,
-        createdAt:            equipmentRepairs.createdAt,
+        repairReason:    equipmentRepairs.repairReason,
+        repairCompany:   equipmentRepairs.repairCompany,
+        cost:            equipmentRepairs.cost,
+        startDate:       equipmentRepairs.startDate,
+        endDate:         equipmentRepairs.endDate,
+        actualEndDate:   equipmentRepairs.actualEndDate,
+        attachmentId:    equipmentRepairs.attachmentId,
+        createdBy:       users.firstName,
+        createdAt:       equipmentRepairs.createdAt,
       })
       .from(equipmentRepairs)
       .leftJoin(equipment, eq(equipmentRepairs.equipmentId, equipment.id))
@@ -380,15 +421,15 @@ export const equipmentRepairsService = {
       .select({
         equipmentUuid:   equipment.uuid,
         equipmentNumber: equipment.equipmentNumber,
-        repairReason:         equipmentRepairs.repairReason,
-        repairCompany:        equipmentRepairs.repairCompany,
-        cost:                 equipmentRepairs.cost,
-        startDate:            equipmentRepairs.startDate,
-        endDate:              equipmentRepairs.endDate,
-        actualEndDate:        equipmentRepairs.actualEndDate,
-        attachmentId:         equipmentRepairs.attachmentId,
-        createdBy:            users.firstName,
-        createdAt:            equipmentRepairs.createdAt,
+        repairReason:    equipmentRepairs.repairReason,
+        repairCompany:   equipmentRepairs.repairCompany,
+        cost:            equipmentRepairs.cost,
+        startDate:       equipmentRepairs.startDate,
+        endDate:         equipmentRepairs.endDate,
+        actualEndDate:   equipmentRepairs.actualEndDate,
+        attachmentId:    equipmentRepairs.attachmentId,
+        createdBy:       users.firstName,
+        createdAt:       equipmentRepairs.createdAt,
       })
       .from(equipmentRepairs)
       .leftJoin(equipment, eq(equipmentRepairs.equipmentId, equipment.id))
@@ -401,15 +442,15 @@ export const equipmentRepairsService = {
       .select({
         equipmentUuid:   equipment.uuid,
         equipmentNumber: equipment.equipmentNumber,
-        repairReason:         equipmentRepairs.repairReason,
-        repairCompany:        equipmentRepairs.repairCompany,
-        cost:                 equipmentRepairs.cost,
-        startDate:            equipmentRepairs.startDate,
-        endDate:              equipmentRepairs.endDate,
-        actualEndDate:        equipmentRepairs.actualEndDate,
-        attachmentId:         equipmentRepairs.attachmentId,
-        createdBy:            users.firstName,
-        createdAt:            equipmentRepairs.createdAt,
+        repairReason:    equipmentRepairs.repairReason,
+        repairCompany:   equipmentRepairs.repairCompany,
+        cost:            equipmentRepairs.cost,
+        startDate:       equipmentRepairs.startDate,
+        endDate:         equipmentRepairs.endDate,
+        actualEndDate:   equipmentRepairs.actualEndDate,
+        attachmentId:    equipmentRepairs.attachmentId,
+        createdBy:       users.firstName,
+        createdAt:       equipmentRepairs.createdAt,
       })
       .from(equipmentRepairs)
       .leftJoin(equipment, eq(equipmentRepairs.equipmentId, equipment.id))
@@ -435,9 +476,9 @@ export const equipmentUnavailableService = {
       .select({
         equipmentUuid:   equipment.uuid,
         equipmentNumber: equipment.equipmentNumber,
-        reason:               equipmentUnavailable.reason,
-        createdBy:            users.firstName,
-        createdAt:            equipmentUnavailable.createdAt,
+        reason:          equipmentUnavailable.reason,
+        createdBy:       users.firstName,
+        createdAt:       equipmentUnavailable.createdAt,
       })
       .from(equipmentUnavailable)
       .leftJoin(equipment, eq(equipmentUnavailable.equipmentId, equipment.id))
@@ -449,9 +490,9 @@ export const equipmentUnavailableService = {
       .select({
         equipmentUuid:   equipment.uuid,
         equipmentNumber: equipment.equipmentNumber,
-        reason:               equipmentUnavailable.reason,
-        createdBy:            users.firstName,
-        createdAt:            equipmentUnavailable.createdAt,
+        reason:          equipmentUnavailable.reason,
+        createdBy:       users.firstName,
+        createdAt:       equipmentUnavailable.createdAt,
       })
       .from(equipmentUnavailable)
       .leftJoin(equipment, eq(equipmentUnavailable.equipmentId, equipment.id))
@@ -464,9 +505,9 @@ export const equipmentUnavailableService = {
       .select({
         equipmentUuid:   equipment.uuid,
         equipmentNumber: equipment.equipmentNumber,
-        reason:               equipmentUnavailable.reason,
-        createdBy:            users.firstName,
-        createdAt:            equipmentUnavailable.createdAt,
+        reason:          equipmentUnavailable.reason,
+        createdBy:       users.firstName,
+        createdAt:       equipmentUnavailable.createdAt,
       })
       .from(equipmentUnavailable)
       .leftJoin(equipment, eq(equipmentUnavailable.equipmentId, equipment.id))
@@ -492,14 +533,14 @@ export const equipmentDisposalsService = {
       .select({
         equipmentUuid:   equipment.uuid,
         equipmentNumber: equipment.equipmentNumber,
-        disposalDate:         equipmentDisposals.disposalDate,
-        disposalMethod:       equipmentDisposals.disposalMethod,
-        cost:                 equipmentDisposals.cost,
-        approvedBy:           equipmentDisposals.approvedBy,
-        reason:               equipmentDisposals.reason,
-        attachmentId:         equipmentDisposals.attachmentId,
-        createdBy:            users.firstName,
-        createdAt:            equipmentDisposals.createdAt,
+        disposalDate:    equipmentDisposals.disposalDate,
+        disposalMethod:  equipmentDisposals.disposalMethod,
+        cost:            equipmentDisposals.cost,
+        approvedBy:      equipmentDisposals.approvedBy,
+        reason:          equipmentDisposals.reason,
+        attachmentId:    equipmentDisposals.attachmentId,
+        createdBy:       users.firstName,
+        createdAt:       equipmentDisposals.createdAt,
       })
       .from(equipmentDisposals)
       .leftJoin(equipment, eq(equipmentDisposals.equipmentId, equipment.id))
@@ -511,14 +552,14 @@ export const equipmentDisposalsService = {
       .select({
         equipmentUuid:   equipment.uuid,
         equipmentNumber: equipment.equipmentNumber,
-        disposalDate:         equipmentDisposals.disposalDate,
-        disposalMethod:       equipmentDisposals.disposalMethod,
-        cost:                 equipmentDisposals.cost,
-        approvedBy:           equipmentDisposals.approvedBy,
-        reason:               equipmentDisposals.reason,
-        attachmentId:         equipmentDisposals.attachmentId,
-        createdBy:            users.firstName,
-        createdAt:            equipmentDisposals.createdAt,
+        disposalDate:    equipmentDisposals.disposalDate,
+        disposalMethod:  equipmentDisposals.disposalMethod,
+        cost:            equipmentDisposals.cost,
+        approvedBy:      equipmentDisposals.approvedBy,
+        reason:          equipmentDisposals.reason,
+        attachmentId:    equipmentDisposals.attachmentId,
+        createdBy:       users.firstName,
+        createdAt:       equipmentDisposals.createdAt,
       })
       .from(equipmentDisposals)
       .leftJoin(equipment, eq(equipmentDisposals.equipmentId, equipment.id))
@@ -531,14 +572,14 @@ export const equipmentDisposalsService = {
       .select({
         equipmentUuid:   equipment.uuid,
         equipmentNumber: equipment.equipmentNumber,
-        disposalDate:         equipmentDisposals.disposalDate,
-        disposalMethod:       equipmentDisposals.disposalMethod,
-        cost:                 equipmentDisposals.cost,
-        approvedBy:           equipmentDisposals.approvedBy,
-        reason:               equipmentDisposals.reason,
-        attachmentId:         equipmentDisposals.attachmentId,
-        createdBy:            users.firstName,
-        createdAt:            equipmentDisposals.createdAt,
+        disposalDate:    equipmentDisposals.disposalDate,
+        disposalMethod:  equipmentDisposals.disposalMethod,
+        cost:            equipmentDisposals.cost,
+        approvedBy:      equipmentDisposals.approvedBy,
+        reason:          equipmentDisposals.reason,
+        attachmentId:    equipmentDisposals.attachmentId,
+        createdBy:       users.firstName,
+        createdAt:       equipmentDisposals.createdAt,
       })
       .from(equipmentDisposals)
       .leftJoin(equipment, eq(equipmentDisposals.equipmentId, equipment.id))
@@ -580,12 +621,12 @@ export const equipmentStatusLogsService = {
       .select({
         equipmentUuid:   equipment.uuid,
         equipmentNumber: equipment.equipmentNumber,
-        status:        equipmentStatusLogs.status,
-        referenceTable:equipmentStatusLogs.referenceTable,
-        referenceId:   equipmentStatusLogs.referenceId,
-        remark:        equipmentStatusLogs.remark,
-        createdBy:     users.firstName,
-        createdAt:     equipmentStatusLogs.createdAt,
+        status:          equipmentStatusLogs.status,
+        referenceTable:  equipmentStatusLogs.referenceTable,
+        referenceId:     equipmentStatusLogs.referenceId,
+        remark:          equipmentStatusLogs.remark,
+        createdBy:       users.firstName,
+        createdAt:       equipmentStatusLogs.createdAt,
       })
       .from(equipmentStatusLogs)
       .leftJoin(equipment, eq(equipmentStatusLogs.equipmentId, equipment.id))
