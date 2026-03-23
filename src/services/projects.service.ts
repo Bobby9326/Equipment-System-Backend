@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { db } from '../config/database.js';
 import { auditService } from './audit.service.js';
 import { projects, users, equipment, mhesiNumbers } from '../db/schema/index.js';
-import { eq, sql, like, and, isNull, asc, desc, gte, lte } from 'drizzle-orm';
+import { eq, sql, like, and, or, isNull, asc, desc, gte, lte } from 'drizzle-orm';
 
 // สร้างเลขโครงการ YYYYMMDDNN (10 หลัก)
 const generateProjectNumber = async (): Promise<string> => {
@@ -63,7 +63,7 @@ export const projectsService = {
 
     const conditions = [isNull(projects.deletedAt)];
 
-    if (filters?.search)              conditions.push(like(projects.projectName, `%${filters.search}%`));
+    if (filters?.search)              conditions.push(or(like(projects.projectName, `%${filters.search}%`), like(projects.projectNumber, `%${filters.search}%`))!);
     if (filters?.status)              conditions.push(eq(projects.status,              filters.status));
     if (filters?.projectTypeId)       conditions.push(eq(projects.projectTypeId,       filters.projectTypeId));
     if (filters?.acquisitionSourceId) conditions.push(eq(projects.acquisitionSourceId, filters.acquisitionSourceId));

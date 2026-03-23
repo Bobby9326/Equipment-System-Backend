@@ -9,6 +9,7 @@ export const equipmentController = {
       const user = c.get('user');
       const search = c.req.query('search');
       const status = c.req.query('status');
+      const excludeStatus = c.req.query('excludeStatus');
       const equipmentTypeId = c.req.query('equipmentTypeId');
       const projectId = c.req.query('projectId');
       const page = parseInt(c.req.query('page') || '1');
@@ -19,6 +20,7 @@ export const equipmentController = {
       const result = await equipmentService.getAll({
         search,
         status,
+        excludeStatus,
         departmentId: getDepartmentFilter(user, c.req.query('departmentId')),
         equipmentTypeId: equipmentTypeId ? parseInt(equipmentTypeId) : undefined,
         projectId: projectId ? parseInt(projectId) : undefined,

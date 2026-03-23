@@ -13,7 +13,7 @@ import {
   mhesiNumbers,
   projects,
 } from '../db/schema/index.js';
-import { eq, like, or, and, sql, isNull, isNotNull, inArray, desc, asc } from 'drizzle-orm';
+import { eq, ne, like, or, and, sql, isNull, isNotNull, inArray, desc, asc } from 'drizzle-orm';
 import { BusinessError } from '../middlewares/error.js';
 import { auditService } from './audit.service.js';
 
@@ -51,6 +51,7 @@ export const equipmentService = {
   getAll: async (filters?: {
     search?: string;
     status?: string;
+    excludeStatus?: string;
     departmentId?: number;
     equipmentTypeId?: number;
     projectId?: number;
@@ -74,6 +75,7 @@ export const equipmentService = {
       )!);
     }
     if (filters?.status)          conditions.push(eq(equipment.status,          filters.status));
+    if (filters?.excludeStatus)   conditions.push(ne(equipment.status,          filters.excludeStatus));
     if (filters?.departmentId)    conditions.push(eq(equipment.departmentId,    filters.departmentId));
     if (filters?.equipmentTypeId) conditions.push(eq(equipment.equipmentTypeId, filters.equipmentTypeId));
     if (filters?.projectId)       conditions.push(eq(equipment.projectId,       filters.projectId));
