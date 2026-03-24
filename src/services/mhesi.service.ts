@@ -1,8 +1,8 @@
 import { randomUUID } from 'crypto';
 import { auditService } from './audit.service.js';
 import { db } from '../config/database.js';
-import { mhesiNumbers, planSections, projects, users } from '../db/schema/index.js';
-import { eq, like, and, isNull, or, sql, asc, desc, gte, lte } from 'drizzle-orm';
+import { mhesiNumbers, planSections, projects, users, attachments } from '../db/schema/index.js';
+import { eq, like, and, isNull, or, sql, asc, desc, gte, lte, inArray } from 'drizzle-orm';
 
 // fields ที่ return ออก API (ไม่มี id)
 const MHESI_SELECT = {
@@ -184,10 +184,33 @@ export const mhesiService = {
         .orderBy(desc(auditLogs.createdAt));
     } catch (_) {}
 
+    // รวบรวม attachmentId ทั้งหมดที่ปรากฏใน before/after
+    const attachmentIds = new Set<number>();
+    for (const log of editLogs) {
+      if (log.before?.attachmentId) attachmentIds.add(log.before.attachmentId);
+      if (log.after?.attachmentId)  attachmentIds.add(log.after.attachmentId);
+    }
+
+    // ดึง fileName จาก attachments table ครั้งเดียว
+    const fileMap = new Map<number, string>();
+    if (attachmentIds.size > 0) {
+      const rows = await db
+        .select({ id: attachments.id, fileName: attachments.fileName })
+        .from(attachments)
+        .where(inArray(attachments.id, [...attachmentIds]));
+      for (const r of rows) fileMap.set(r.id, r.fileName);
+    }
+
     return editLogs.map(log => ({
       action:    log.action,
-      before:    log.before,
-      after:     log.after,
+      before:    log.before ? {
+        ...log.before,
+        attachmentFileName: log.before.attachmentId ? (fileMap.get(log.before.attachmentId) ?? null) : null,
+      } : null,
+      after:     log.after ? {
+        ...log.after,
+        attachmentFileName: log.after.attachmentId ? (fileMap.get(log.after.attachmentId) ?? null) : null,
+      } : null,
       createdAt: log.createdAt,
       changedBy: `${log.firstName ?? ''} ${log.lastName ?? ''}`.trim(),
     }));
