@@ -116,13 +116,32 @@ export const equipmentService = {
       }
     })();
 
-    const data = await db
-      .select(EQUIPMENT_SELECT)
+    const rawData = await db
+      .select({
+        ...EQUIPMENT_SELECT,
+        // ตำแหน่งที่ยืมอยู่ (null ถ้าไม่ได้ยืม)
+        borrowingBuildingId: equipmentBorrows.borrowingBuildingId,
+        borrowingRoomId:     equipmentBorrows.borrowingRoomId,
+      })
       .from(equipment)
+      .leftJoin(
+        equipmentBorrows,
+        and(
+          eq(equipmentBorrows.equipmentId, equipment.id),
+          isNull(equipmentBorrows.actualReturnDate), // เฉพาะที่ยังไม่คืน
+        )
+      )
       .where(whereClause)
       .orderBy(...orderByCols)
       .limit(limit)
       .offset(offset);
+
+    // override buildingId/roomId เมื่อ status = borrowed
+    const data = rawData.map(({ borrowingBuildingId, borrowingRoomId, ...row }) => ({
+      ...row,
+      buildingId: row.status === 'borrowed' ? (borrowingBuildingId ?? row.buildingId) : row.buildingId,
+      roomId:     row.status === 'borrowed' ? (borrowingRoomId     ?? row.roomId)     : row.roomId,
+    }));
 
     const totalResult = await db
       .select({ count: sql<number>`count(*)` })
