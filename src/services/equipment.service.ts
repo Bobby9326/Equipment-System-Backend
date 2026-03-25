@@ -13,7 +13,7 @@ import {
   mhesiNumbers,
   projects,
 } from '../db/schema/index.js';
-import { eq, ne, like, or, and, sql, isNull, isNotNull, inArray, desc, asc } from 'drizzle-orm';
+import { eq, like, or, and, sql, isNull, isNotNull, inArray, desc, asc, gte, lte } from 'drizzle-orm';
 import { BusinessError } from '../middlewares/error.js';
 import { auditService } from './audit.service.js';
 
@@ -54,6 +54,12 @@ export const equipmentService = {
     excludeStatus?: string;
     departmentId?: number;
     equipmentTypeId?: number;
+    acquisitionSourceId?: number;
+    fiscalYear?: number;
+    priceMin?: number;
+    priceMax?: number;
+    buildingId?: number;
+    roomId?: number;
     projectId?: number;
     page?: number;
     limit?: number;
@@ -74,11 +80,17 @@ export const equipmentService = {
         like(equipment.equipmentName,   s),
       )!);
     }
-    if (filters?.status)          conditions.push(eq(equipment.status,          filters.status));
-    if (filters?.excludeStatus)   conditions.push(ne(equipment.status,          filters.excludeStatus));
-    if (filters?.departmentId)    conditions.push(eq(equipment.departmentId,    filters.departmentId));
-    if (filters?.equipmentTypeId) conditions.push(eq(equipment.equipmentTypeId, filters.equipmentTypeId));
-    if (filters?.projectId)       conditions.push(eq(equipment.projectId,       filters.projectId));
+    if (filters?.status)              conditions.push(eq(equipment.status,              filters.status));
+    if (filters?.excludeStatus)       conditions.push(sql`${equipment.status} != ${filters.excludeStatus}`);
+    if (filters?.departmentId)        conditions.push(eq(equipment.departmentId,        filters.departmentId));
+    if (filters?.equipmentTypeId)     conditions.push(eq(equipment.equipmentTypeId,     filters.equipmentTypeId));
+    if (filters?.acquisitionSourceId) conditions.push(eq(equipment.acquisitionSourceId, filters.acquisitionSourceId));
+    if (filters?.fiscalYear)          conditions.push(eq(equipment.fiscalYear,          filters.fiscalYear));
+    if (filters?.priceMin != null)    conditions.push(gte(equipment.price, String(filters.priceMin)));
+    if (filters?.priceMax != null)    conditions.push(lte(equipment.price, String(filters.priceMax)));
+    if (filters?.buildingId)          conditions.push(eq(equipment.buildingId,          filters.buildingId));
+    if (filters?.roomId)              conditions.push(eq(equipment.roomId,              filters.roomId));
+    if (filters?.projectId)           conditions.push(eq(equipment.projectId,           filters.projectId));
 
     const whereClause = and(...conditions);
 

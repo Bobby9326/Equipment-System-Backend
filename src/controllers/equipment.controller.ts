@@ -7,27 +7,24 @@ export const equipmentController = {
   getAll: async (c: Context) => {
     try {
       const user = c.get('user');
-      const search = c.req.query('search');
-      const status = c.req.query('status');
-      const excludeStatus = c.req.query('excludeStatus');
-      const equipmentTypeId = c.req.query('equipmentTypeId');
-      const projectId = c.req.query('projectId');
-      const page = parseInt(c.req.query('page') || '1');
-      const limit = parseInt(c.req.query('limit') || '10');
-      const sortBy = c.req.query('sortBy');
-      const sortDir = c.req.query('sortDir') as 'asc' | 'desc' | undefined;
 
       const result = await equipmentService.getAll({
-        search,
-        status,
-        excludeStatus,
-        departmentId: getDepartmentFilter(user, c.req.query('departmentId')),
-        equipmentTypeId: equipmentTypeId ? parseInt(equipmentTypeId) : undefined,
-        projectId: projectId ? parseInt(projectId) : undefined,
-        page,
-        limit,
-        sortBy,
-        sortDir,
+        search:              c.req.query('search'),
+        status:              c.req.query('status'),
+        excludeStatus:       c.req.query('excludeStatus'),
+        departmentId:        getDepartmentFilter(user, c.req.query('departmentId')),
+        equipmentTypeId:     c.req.query('equipmentTypeId')     ? parseInt(c.req.query('equipmentTypeId')!)     : undefined,
+        acquisitionSourceId: c.req.query('acquisitionSourceId') ? parseInt(c.req.query('acquisitionSourceId')!) : undefined,
+        fiscalYear:          c.req.query('fiscalYear')          ? parseInt(c.req.query('fiscalYear')!)          : undefined,
+        priceMin:            c.req.query('priceMin')            ? parseFloat(c.req.query('priceMin')!)          : undefined,
+        priceMax:            c.req.query('priceMax')            ? parseFloat(c.req.query('priceMax')!)          : undefined,
+        buildingId:          c.req.query('buildingId')          ? parseInt(c.req.query('buildingId')!)          : undefined,
+        roomId:              c.req.query('roomId')              ? parseInt(c.req.query('roomId')!)              : undefined,
+        projectId:           c.req.query('projectId')           ? parseInt(c.req.query('projectId')!)           : undefined,
+        page:                parseInt(c.req.query('page')  || '1'),
+        limit:               parseInt(c.req.query('limit') || '10'),
+        sortBy:              c.req.query('sortBy'),
+        sortDir:             c.req.query('sortDir') as 'asc' | 'desc' | undefined,
       });
 
       return paginatedResponse(c, result.data, result.total, result.page, result.limit);
@@ -78,7 +75,7 @@ export const equipmentController = {
       const { numberPrefix, start, end, padLength, ...equipmentData } = await c.req.json();
 
       if (!equipmentData.equipmentCode) return errorResponse(c, 'equipmentCode is required', 400);
-      if (!numberPrefix) return errorResponse(c, 'numberPrefix is required', 400);
+      if (!numberPrefix)                return errorResponse(c, 'numberPrefix is required', 400);
       if (start === undefined || isNaN(Number(start))) return errorResponse(c, 'start must be a number', 400);
       if (end !== undefined && Number(end) < Number(start)) return errorResponse(c, 'end must be >= start', 400);
 
@@ -88,11 +85,11 @@ export const equipmentController = {
 
       const result = await equipmentService.create({
         numberPrefix,
-        start: Number(start),
-        end: end !== undefined ? Number(end) : undefined,
+        start:     Number(start),
+        end:       end !== undefined ? Number(end) : undefined,
         padLength: padLength ? Number(padLength) : undefined,
-        userUuid: user.uuid,
-        data: equipmentData,
+        userUuid:  user.uuid,
+        data:      equipmentData,
       });
 
       const message = result.length > 1 ? `สร้างครุภัณฑ์สำเร็จ ${result.length} รายการ` : 'Equipment created successfully';
@@ -173,6 +170,6 @@ export const equipmentController = {
       return successResponse(c, data, 'Equipment statistics retrieved successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
-    } 
+    }
   },
 };
