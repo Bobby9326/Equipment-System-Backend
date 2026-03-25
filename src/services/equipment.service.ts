@@ -379,18 +379,23 @@ export const equipmentService = {
     return result[0] || null;
   },
 
-  getStats: async (departmentId?: number) => {
+ getStats: async (departmentId?: number) => {
     const ALL_STATUSES = ['pending', 'normal', 'borrowed', 'repair', 'unavailable', 'disposed'] as const;
+
+    // ✅ แก้: เพิ่ม departmentId filter ใน conditions
+    const conditions = [isNull(equipment.deletedAt)];
+    if (departmentId) conditions.push(eq(equipment.departmentId, departmentId));
+    const whereClause = and(...conditions);
 
     const totalResult = await db
       .select({ count: sql<number>`count(*)` })
       .from(equipment)
-      .where(isNull(equipment.deletedAt));
+      .where(whereClause);  // ← เปลี่ยนจาก isNull(equipment.deletedAt)
 
     const statusRows = await db
       .select({ status: equipment.status, count: sql<number>`count(*)` })
       .from(equipment)
-      .where(isNull(equipment.deletedAt))
+      .where(whereClause)   // ← เปลี่ยนจาก isNull(equipment.deletedAt)
       .groupBy(equipment.status);
 
     const statusMap = Object.fromEntries(statusRows.map(r => [r.status, Number(r.count)]));
@@ -399,13 +404,10 @@ export const equipmentService = {
       count: statusMap[status] ?? 0,
     }));
 
-    const deptConditions = [isNull(equipment.deletedAt)];
-    if (departmentId) deptConditions.push(eq(equipment.departmentId, departmentId));
-
     const byDepartment = await db
       .select({ departmentId: equipment.departmentId, count: sql<number>`count(*)` })
       .from(equipment)
-      .where(and(...deptConditions))
+      .where(whereClause)   // ← เปลี่ยนตรงนี้ด้วย
       .groupBy(equipment.departmentId);
 
     return { total: totalResult[0].count, byStatus, byDepartment };
