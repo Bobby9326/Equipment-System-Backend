@@ -273,7 +273,7 @@ export const equipmentService = {
     userUuid: string;
     data: Omit<typeof equipment.$inferInsert, 'equipmentNumber'>;
   }) => {
-    const { numberPrefix, start, end, padLength = 3, userUuid, data } = params;
+    const { numberPrefix, start, end, padLength = 4, userUuid, data } = params;
     const endNum = end ?? start;
 
     if (start > endNum) throw new BusinessError('ลำดับเริ่มต้นต้องน้อยกว่าหรือเท่ากับลำดับสิ้นสุด');
@@ -341,8 +341,15 @@ export const equipmentService = {
   },
 
   updateByUuid: async (uuid: string, data: Partial<typeof equipment.$inferInsert>, userUuid?: string) => {
-    const before = await equipmentService.getByUuid(uuid);
-    if (!before) return null;
+    
+    // ✅ แก้: ดึง before เฉพาะ EQUIPMENT_SELECT ไม่ต้องการ trace fields
+    const beforeResult = await db
+      .select(EQUIPMENT_SELECT)
+      .from(equipment)
+      .where(and(eq(equipment.uuid, uuid), isNull(equipment.deletedAt)));
+    
+    if (!beforeResult[0]) return null;
+    const before = beforeResult[0];
 
     const result = await db
       .update(equipment)

@@ -34,7 +34,6 @@ export const mhesiController = {
         amountMax:    amountMax    ? parseFloat(amountMax)  : undefined,
         dateFrom,
         dateTo,
-        departmentId: getDepartmentFilter(user, c.req.query('departmentId')),
         page,
         limit,
         sortBy,
