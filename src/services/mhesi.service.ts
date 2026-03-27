@@ -1,10 +1,12 @@
 import { randomUUID } from 'crypto';
 import { auditService } from './audit.service.js';
 import { db } from '../config/database.js';
-import { mhesiNumbers, planSections, projects, users, attachments } from '../db/schema/index.js';
-import { eq, like, and, isNull, or, sql, asc, desc, gte, lte, inArray } from 'drizzle-orm';
+import { mhesiNumbers, mhesiAttachments, attachments, planSections, projects, users } from '../db/schema/index.js';
+import { eq, like, and, isNull, or, sql, asc, desc, gte, lte } from 'drizzle-orm';
+import { storageService } from './storage.service.js';
 
-// fields ที่ return ออก API (ไม่มี id)
+const toFileUrl = (id: number) => `/api/attachments/${id}/file`;
+
 const MHESI_SELECT = {
   uuid:          mhesiNumbers.uuid,
   mhesiNumber:   mhesiNumbers.mhesiNumber,
@@ -28,7 +30,7 @@ export const mhesiService = {
     projectId?: number;
     departmentId?: number;
     faculty?: string;
-    role?: string;    // 'planning'|'procurement'|'contract'|'receiving'|'other'
+    role?: string;
     planId?: number;
     amountMin?: number;
     amountMax?: number;
@@ -55,9 +57,9 @@ export const mhesiService = {
     }
     if (filters?.projectId)    conditions.push(eq(mhesiNumbers.projectId,    filters.projectId));
     if (filters?.departmentId) conditions.push(eq(mhesiNumbers.departmentId, filters.departmentId));
-    if (filters?.faculty) conditions.push(eq(mhesiNumbers.faculty, filters.faculty));
-    if (filters?.role)    conditions.push(eq(mhesiNumbers.role, filters.role));
-    if (filters?.planId)        conditions.push(eq(mhesiNumbers.planId,        filters.planId));
+    if (filters?.faculty)      conditions.push(eq(mhesiNumbers.faculty,      filters.faculty));
+    if (filters?.role)         conditions.push(eq(mhesiNumbers.role,         filters.role));
+    if (filters?.planId)       conditions.push(eq(mhesiNumbers.planId,       filters.planId));
     if (filters?.amountMin !== undefined) conditions.push(gte(mhesiNumbers.amount, String(filters.amountMin)));
     if (filters?.amountMax !== undefined) conditions.push(lte(mhesiNumbers.amount, String(filters.amountMax)));
     if (filters?.dateFrom) conditions.push(gte(mhesiNumbers.date, filters.dateFrom));
@@ -70,11 +72,11 @@ export const mhesiService = {
       switch (filters?.sortBy) {
         case 'mhesiNumber':  return [dir(mhesiNumbers.mhesiNumber)];
         case 'activityName': return [dir(mhesiNumbers.activityName)];
-        case 'date':         return [dir(mhesiNumbers.date), asc(mhesiNumbers.mhesiNumber)];
-        case 'amount':       return [dir(mhesiNumbers.amount), asc(mhesiNumbers.mhesiNumber)];
-        case 'project':      return [dir(projects.projectName),   asc(mhesiNumbers.mhesiNumber)];
-        case 'faculty':      return [dir(mhesiNumbers.faculty),    asc(mhesiNumbers.mhesiNumber)];
-        case 'plan':         return [dir(planSections.name),              asc(mhesiNumbers.mhesiNumber)];
+        case 'date':         return [dir(mhesiNumbers.date),         asc(mhesiNumbers.mhesiNumber)];
+        case 'amount':       return [dir(mhesiNumbers.amount),       asc(mhesiNumbers.mhesiNumber)];
+        case 'project':      return [dir(projects.projectName),      asc(mhesiNumbers.mhesiNumber)];
+        case 'faculty':      return [dir(mhesiNumbers.faculty),      asc(mhesiNumbers.mhesiNumber)];
+        case 'plan':         return [dir(planSections.name),         asc(mhesiNumbers.mhesiNumber)];
         default:             return [desc(mhesiNumbers.createdAt)];
       }
     })();
@@ -82,8 +84,8 @@ export const mhesiService = {
     const data = await db
       .select(MHESI_SELECT)
       .from(mhesiNumbers)
-      .leftJoin(projects,     eq(mhesiNumbers.projectId,    projects.id))
-      .leftJoin(planSections, eq(mhesiNumbers.planId, planSections.id))
+      .leftJoin(projects,     eq(mhesiNumbers.projectId, projects.id))
+      .leftJoin(planSections, eq(mhesiNumbers.planId,    planSections.id))
       .where(whereClause)
       .orderBy(...orderByCols)
       .limit(limit)
@@ -94,20 +96,51 @@ export const mhesiService = {
       .from(mhesiNumbers)
       .where(whereClause);
 
-    return {
-      data,
-      total: totalResult[0].count,
-      page,
-      limit,
-    };
+    return { data, total: totalResult[0].count, page, limit };
   },
 
+  // ✅ เพิ่ม additionalAttachments
   getByUuid: async (uuid: string) => {
     const result = await db
       .select(MHESI_SELECT)
       .from(mhesiNumbers)
       .where(and(eq(mhesiNumbers.uuid, uuid), isNull(mhesiNumbers.deletedAt)));
-    return result[0] || null;
+
+    if (!result[0]) return null;
+    const mhesi = result[0];
+
+    // ดึงไฟล์หลัก
+    let mainAttachment = null;
+    if (mhesi.attachmentId) {
+      const att = await db
+        .select({ id: attachments.id, fileName: attachments.fileName, fileType: attachments.fileType })
+        .from(attachments)
+        .where(eq(attachments.id, mhesi.attachmentId));
+      if (att[0]) mainAttachment = { ...att[0], fileUrl: toFileUrl(att[0].id) };
+    }
+
+    // ดึงไฟล์เพิ่มเติม
+    const mhesiRow = await db
+      .select({ id: mhesiNumbers.id })
+      .from(mhesiNumbers)
+      .where(eq(mhesiNumbers.uuid, uuid));
+
+    const additionalAttachments = await db
+      .select({
+        id:       attachments.id,
+        fileName: attachments.fileName,
+        fileType: attachments.fileType,
+      })
+      .from(mhesiAttachments)
+      .innerJoin(attachments, eq(mhesiAttachments.attachmentId, attachments.id))
+      .where(eq(mhesiAttachments.mhesiId, mhesiRow[0].id))
+      .then(rows => rows.map(r => ({ ...r, fileUrl: toFileUrl(r.id) })));
+
+    return {
+      ...mhesi,
+      mainAttachment,          // ไฟล์หลัก (1 ต่อ 1)
+      additionalAttachments,   // ไฟล์เพิ่มเติม (หลายไฟล์)
+    };
   },
 
   getByProjectId: async (projectId: number) => {
@@ -118,7 +151,7 @@ export const mhesiService = {
   },
 
   create: async (data: Omit<typeof mhesiNumbers.$inferInsert,
-    | 'id' | 'uuid' | 'createdAt' | 'updatedAt' | 'deletedAt'
+    'id' | 'uuid' | 'createdAt' | 'updatedAt' | 'deletedAt'
   >) => {
     const result = await db
       .insert(mhesiNumbers)
@@ -128,7 +161,7 @@ export const mhesiService = {
   },
 
   updateByUuid: async (uuid: string, data: Partial<Omit<typeof mhesiNumbers.$inferInsert,
-    | 'id' | 'uuid' | 'createdAt' | 'deletedAt'
+    'id' | 'uuid' | 'createdAt' | 'deletedAt'
   >>, userUuid?: string) => {
     const before = await mhesiService.getByUuid(uuid);
     if (!before) return null;
@@ -161,7 +194,103 @@ export const mhesiService = {
     return result[0] || null;
   },
 
-  // ประวัติการแก้ไข mhesi
+  // ✅ เพิ่ม: อัปโหลดไฟล์เพิ่มเติม
+  addAttachments: async (uuid: string, files: File[], userUuid?: string) => {
+    const mhesi = await db
+      .select({ id: mhesiNumbers.id })
+      .from(mhesiNumbers)
+      .where(and(eq(mhesiNumbers.uuid, uuid), isNull(mhesiNumbers.deletedAt)));
+    if (!mhesi[0]) throw new Error('ไม่พบ MHESI');
+
+    const results = await Promise.all(
+      files.map(async (file) => {
+        const uploaded = await storageService.upload(file, 'mhesi');
+        const [att] = await db
+          .insert(attachments)
+          .values({ fileName: uploaded.fileName, filePath: uploaded.filePath, fileType: uploaded.fileType })
+          .returning({ id: attachments.id, fileName: attachments.fileName, fileType: attachments.fileType });
+
+        await db.insert(mhesiAttachments).values({
+          mhesiId:      mhesi[0].id,
+          attachmentId: att.id,
+        });
+
+        // ✅ audit log
+        if (userUuid) {
+          await auditService.log({
+            entity:     'mhesi',
+            entityUuid: uuid,
+            action:     'update',
+            before:     {},
+            after:      { addedAttachment: att.id, fileName: att.fileName, fileUrl: toFileUrl(att.id) },
+            userUuid,
+          });
+        }
+
+        return { ...att, fileUrl: toFileUrl(att.id) };
+      })
+    );
+    return results;
+  },
+
+  // ✅ เพิ่ม: ดูไฟล์เพิ่มเติมทั้งหมด
+  getAttachments: async (uuid: string) => {
+    const mhesi = await db
+      .select({ id: mhesiNumbers.id })
+      .from(mhesiNumbers)
+      .where(and(eq(mhesiNumbers.uuid, uuid), isNull(mhesiNumbers.deletedAt)));
+    if (!mhesi[0]) return null;
+
+    return db
+      .select({
+        id:       attachments.id,
+        fileName: attachments.fileName,
+        fileType: attachments.fileType,
+      })
+      .from(mhesiAttachments)
+      .innerJoin(attachments, eq(mhesiAttachments.attachmentId, attachments.id))
+      .where(eq(mhesiAttachments.mhesiId, mhesi[0].id))
+      .then(rows => rows.map(r => ({ ...r, fileUrl: toFileUrl(r.id) })));
+  },
+
+  // ✅ เพิ่ม: ลบไฟล์เพิ่มเติม
+  removeAttachment: async (uuid: string, attachmentId: number, userUuid?: string) => {
+    const mhesi = await db
+      .select({ id: mhesiNumbers.id })
+      .from(mhesiNumbers)
+      .where(and(eq(mhesiNumbers.uuid, uuid), isNull(mhesiNumbers.deletedAt)));
+    if (!mhesi[0]) throw new Error('ไม่พบ MHESI');
+
+    const att = await db
+      .select({ id: attachments.id, fileName: attachments.fileName, filePath: attachments.filePath })
+      .from(attachments)
+      .where(eq(attachments.id, attachmentId));
+    if (!att[0]) throw new Error('ไม่พบไฟล์');
+
+    // ✅ audit log ก่อนลบ
+    if (userUuid) {
+      await auditService.log({
+        entity:     'mhesi',
+        entityUuid: uuid,
+        action:     'update',
+        before:     { removedAttachment: att[0].id, fileName: att[0].fileName },
+        after:      {},
+        userUuid,
+      });
+    }
+
+    await db.delete(mhesiAttachments).where(
+      and(
+        eq(mhesiAttachments.mhesiId,      mhesi[0].id),
+        eq(mhesiAttachments.attachmentId, attachmentId),
+      )
+    );
+    await storageService.delete(att[0].filePath);
+    await db.delete(attachments).where(eq(attachments.id, attachmentId));
+
+    return { deleted: attachmentId };
+  },
+
   getHistory: async (uuid: string) => {
     let editLogs: any[] = [];
     try {
@@ -179,38 +308,15 @@ export const mhesiService = {
         .leftJoin(users, eq(auditLogs.changedBy, users.id))
         .where(and(
           eq(auditLogs.entity,     'mhesi'),
-          eq(auditLogs.entityUuid, uuid)
+          eq(auditLogs.entityUuid, uuid),
         ))
         .orderBy(desc(auditLogs.createdAt));
     } catch (_) {}
 
-    // รวบรวม attachmentId ทั้งหมดที่ปรากฏใน before/after
-    const attachmentIds = new Set<number>();
-    for (const log of editLogs) {
-      if (log.before?.attachmentId) attachmentIds.add(log.before.attachmentId);
-      if (log.after?.attachmentId)  attachmentIds.add(log.after.attachmentId);
-    }
-
-    // ดึง fileName จาก attachments table ครั้งเดียว
-    const fileMap = new Map<number, string>();
-    if (attachmentIds.size > 0) {
-      const rows = await db
-        .select({ id: attachments.id, fileName: attachments.fileName })
-        .from(attachments)
-        .where(inArray(attachments.id, [...attachmentIds]));
-      for (const r of rows) fileMap.set(r.id, r.fileName);
-    }
-
     return editLogs.map(log => ({
       action:    log.action,
-      before:    log.before ? {
-        ...log.before,
-        attachmentFileName: log.before.attachmentId ? (fileMap.get(log.before.attachmentId) ?? null) : null,
-      } : null,
-      after:     log.after ? {
-        ...log.after,
-        attachmentFileName: log.after.attachmentId ? (fileMap.get(log.after.attachmentId) ?? null) : null,
-      } : null,
+      before:    log.before,
+      after:     log.after,
       createdAt: log.createdAt,
       changedBy: `${log.firstName ?? ''} ${log.lastName ?? ''}`.trim(),
     }));

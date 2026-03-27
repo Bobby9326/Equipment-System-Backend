@@ -26,14 +26,15 @@ export const mhesiController = {
 
       const result = await mhesiService.getAll({
         search,
-        projectId:    projectId    ? parseInt(projectId)    : undefined,
+        projectId:    projectId ? parseInt(projectId) : undefined,
         faculty,
         role,
-        planId:       planId       ? parseInt(planId)       : undefined,
-        amountMin:    amountMin    ? parseFloat(amountMin)  : undefined,
-        amountMax:    amountMax    ? parseFloat(amountMax)  : undefined,
+        planId:       planId    ? parseInt(planId)    : undefined,
+        amountMin:    amountMin ? parseFloat(amountMin) : undefined,
+        amountMax:    amountMax ? parseFloat(amountMax) : undefined,
         dateFrom,
         dateTo,
+        departmentId: getDepartmentFilter(user, c.req.query('departmentId')),
         page,
         limit,
         sortBy,
@@ -71,6 +72,17 @@ export const mhesiController = {
       const uuid = c.req.param('uuid');
       const data = await mhesiService.getHistory(uuid);
       return successResponse(c, data, 'MHESI history retrieved successfully');
+    } catch (error: any) {
+      return errorResponse(c, error.message, 500);
+    }
+  },
+
+  getAttachments: async (c: Context) => {
+    try {
+      const uuid = c.req.param('uuid');
+      const data = await mhesiService.getAttachments(uuid);
+      if (data === null) return errorResponse(c, 'MHESI not found', 404);
+      return successResponse(c, data, 'Attachments retrieved successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
     }
@@ -119,6 +131,41 @@ export const mhesiController = {
       const data = await mhesiService.deleteByUuid(uuid);
       if (!data) return errorResponse(c, 'MHESI number not found', 404);
       return successResponse(c, data, 'MHESI number deleted successfully');
+    } catch (error: any) {
+      return errorResponse(c, error.message, 500);
+    }
+  },
+
+  // ✅ POST ไฟล์เพิ่มเติม (เฉพาะ department 1)
+  uploadAttachments: async (c: Context) => {
+    try {
+      const user = c.get('user');
+      if (!isAdminOrManager(user)) {
+        return errorResponse(c, 'ไม่มีสิทธิ์เพิ่มไฟล์ เฉพาะ admin หรือ department 1 เท่านั้น', 403);
+      }
+      const uuid = c.req.param('uuid');
+      const body = await c.req.parseBody({ all: true });
+      const raw  = body['files'] ?? body['file'];
+      const files: File[] = (Array.isArray(raw) ? raw : [raw]).filter((f): f is File => f instanceof File);
+      if (files.length === 0) return errorResponse(c, 'กรุณาแนบไฟล์', 400);
+      const data = await mhesiService.addAttachments(uuid, files, user.uuid);
+      return successResponse(c, data, `อัปโหลด ${data.length} ไฟล์สำเร็จ`, 201);
+    } catch (error: any) {
+      return errorResponse(c, error.message, 500);
+    }
+  },
+
+  // ✅ DELETE ไฟล์เพิ่มเติม (เฉพาะ department 1)
+  deleteAttachment: async (c: Context) => {
+    try {
+      const user = c.get('user');
+      if (!isAdminOrManager(user)) {
+        return errorResponse(c, 'ไม่มีสิทธิ์ลบไฟล์ เฉพาะ admin หรือ department 1 เท่านั้น', 403);
+      }
+      const uuid         = c.req.param('uuid');
+      const attachmentId = parseInt(c.req.param('attachmentId'));
+      const data = await mhesiService.removeAttachment(uuid, attachmentId, user.uuid);
+      return successResponse(c, data, 'ลบไฟล์สำเร็จ');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
     }

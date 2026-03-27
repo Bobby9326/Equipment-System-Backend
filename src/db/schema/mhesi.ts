@@ -16,8 +16,14 @@ export const mhesiNumbers = pgTable('mhesi_numbers', {
   date:         date('date'),
   amount:       decimal('amount', { precision: 15, scale: 2 }),
   note:         text('note'),
-  attachmentId: integer('attachment_id').references(() => attachments.id),
+  attachmentId: integer('attachment_id').references(() => attachments.id), // ไฟล์หลัก (1 ต่อ 1)
   createdAt:    timestamp('created_at').defaultNow().notNull(),
   updatedAt:    timestamp('updated_at').defaultNow().notNull(),
   deletedAt:    timestamp('deleted_at'),
+});
+
+export const mhesiAttachments = pgTable('mhesi_attachments', {
+  id:           serial('id').primaryKey(),
+  mhesiId:      integer('mhesi_id').references(() => mhesiNumbers.id).notNull(),
+  attachmentId: integer('attachment_id').references(() => attachments.id).notNull(),
 });
