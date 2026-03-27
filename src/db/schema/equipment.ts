@@ -36,6 +36,7 @@ export const equipment = pgTable('equipment', {
   warrantyYears:       integer('warranty_years'),                        // ✅ ระยะเวลาประกัน (ปี)
   warrantyMonths:      integer('warranty_months'),                       // ✅ ระยะเวลาประกัน (เดือน)
   warrantyEnd:         date('warranty_end'),                             // ✅ วันหมดประกัน
+  warrantyAttachmentId: integer('warranty_attachment_id').references(() => attachments.id), // ✅ ใบประกัน
   projectId:           integer('project_id').references(() => projects.id),
   receivingMhesiId:    integer('receiving_mhesi_id').references(() => mhesiNumbers.id),
   status:              varchar('status',             { length: 50 }).default('pending'),

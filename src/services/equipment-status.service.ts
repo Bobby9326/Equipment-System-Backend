@@ -211,6 +211,14 @@ export const changeStatusService = {
           if (data.departmentId != null) equipmentUpdate.departmentId = data.departmentId;
           if (data.buildingId   != null) equipmentUpdate.buildingId   = data.buildingId;
           if (data.roomId       != null) equipmentUpdate.roomId       = data.roomId;
+          if (data.floor        != null) equipmentUpdate.floor        = data.floor;
+        }
+
+        if (newStatus === 'borrowed') {
+          // ยืม — อัปเดตตำแหน่งที่ยืมไปลง equipment
+          if (data.borrowingBuildingId != null) equipmentUpdate.buildingId = data.borrowingBuildingId;
+          if (data.borrowingRoomId     != null) equipmentUpdate.roomId     = data.borrowingRoomId;
+          if (data.floor               != null) equipmentUpdate.floor      = data.floor;
         }
 
         await tx

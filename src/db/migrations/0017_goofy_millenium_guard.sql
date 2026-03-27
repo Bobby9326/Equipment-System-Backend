@@ -1,0 +1,2 @@
+ALTER TABLE "equipment" ADD COLUMN "warranty_attachment_id" integer;--> statement-breakpoint
+ALTER TABLE "equipment" ADD CONSTRAINT "equipment_warranty_attachment_id_attachments_id_fk" FOREIGN KEY ("warranty_attachment_id") REFERENCES "public"."attachments"("id") ON DELETE no action ON UPDATE no action;

@@ -120,6 +120,13 @@
       "when": 1774625693549,
       "tag": "0016_worried_cobalt_man",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1774643722911,
+      "tag": "0017_goofy_millenium_guard",
+      "breakpoints": true
     }
   ]
 }

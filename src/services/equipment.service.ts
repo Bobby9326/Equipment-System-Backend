@@ -43,6 +43,7 @@ const EQUIPMENT_SELECT = {
   warrantyYears:       equipment.warrantyYears,
   warrantyMonths:      equipment.warrantyMonths,
   warrantyEnd:         equipment.warrantyEnd,
+  warrantyAttachmentId: equipment.warrantyAttachmentId,
   projectId:           equipment.projectId,
   receivingMhesiId:    equipment.receivingMhesiId,
   status:              equipment.status,
