@@ -419,6 +419,104 @@ export const equipmentService = {
   },
 
   // ─────────────────────────────────────────────
+  // ─────────────────────────────────────────────
+  // getActivityStats — สถิติการใช้งานสำหรับ Dashboard
+  // period: 'week' | 'month' | 'fiscal'
+  // ─────────────────────────────────────────────
+  getActivityStats: async (period: 'week' | 'month' | 'fiscal', departmentId?: number) => {
+    const now   = new Date();
+    let labels: string[] = [];
+    let ranges: { start: Date; end: Date; label: string }[] = [];
+
+    if (period === 'week') {
+      // 7 วันย้อนหลัง (จันทร์ถึงวันนี้)
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(now.getDate() - i);
+        const start = new Date(d); start.setHours(0,0,0,0);
+        const end   = new Date(d); end.setHours(23,59,59,999);
+        const dayNames = ['อา','จ','อ','พ','พฤ','ศ','ส'];
+        ranges.push({ start, end, label: `${dayNames[d.getDay()]} ${d.getDate()}/${d.getMonth()+1}` });
+      }
+    } else if (period === 'month') {
+      // 4 สัปดาห์ย้อนหลัง
+      for (let i = 3; i >= 0; i--) {
+        const end   = new Date(now);
+        end.setDate(now.getDate() - i * 7);
+        end.setHours(23,59,59,999);
+        const start = new Date(end);
+        start.setDate(end.getDate() - 6);
+        start.setHours(0,0,0,0);
+        ranges.push({ start, end, label: `สัปดาห์ที่ ${4 - i}` });
+      }
+    } else {
+      // ปีงบประมาณปัจจุบัน: ต.ค. ปีก่อน - ก.ย. ปีนี้
+      const thMonth  = now.getMonth(); // 0-based
+      const fyStart  = thMonth >= 9
+        ? new Date(now.getFullYear(), 9, 1)   // ต.ค. ปีนี้
+        : new Date(now.getFullYear() - 1, 9, 1); // ต.ค. ปีก่อน
+      const monthNames = ['ต.ค.','พ.ย.','ธ.ค.','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.'];
+      for (let i = 0; i < 12; i++) {
+        const d = new Date(fyStart);
+        d.setMonth(fyStart.getMonth() + i);
+        const start = new Date(d.getFullYear(), d.getMonth(), 1);
+        const end   = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+        ranges.push({ start, end, label: monthNames[i] });
+      }
+    }
+
+    // ดึง status_logs ทั้งหมดในช่วงเวลา
+    const from = ranges[0].start;
+    const to   = ranges[ranges.length - 1].end;
+
+    const deptConditions: any[] = [
+      sql`${equipmentStatusLogs.createdAt} >= ${from.toISOString()}`,
+      sql`${equipmentStatusLogs.createdAt} <= ${to.toISOString()}`,
+    ];
+
+    // กรอง department ผ่าน join equipment
+    if (departmentId) {
+      deptConditions.push(eq(equipment.departmentId, departmentId));
+    }
+
+    const logs = await db
+      .select({
+        createdAt: equipmentStatusLogs.createdAt,
+        status:    equipmentStatusLogs.status,
+      })
+      .from(equipmentStatusLogs)
+      .leftJoin(equipment, eq(equipmentStatusLogs.equipmentId, equipment.id))
+      .where(and(...deptConditions));
+
+    // นับตาม range
+    const datasets: Record<string, number[]> = {
+      normal:      new Array(ranges.length).fill(0),
+      borrowed:    new Array(ranges.length).fill(0),
+      repair:      new Array(ranges.length).fill(0),
+      unavailable: new Array(ranges.length).fill(0),
+      disposed:    new Array(ranges.length).fill(0),
+    };
+
+    for (const log of logs) {
+      const logDate = new Date(log.createdAt);
+      const idx = ranges.findIndex(r => logDate >= r.start && logDate <= r.end);
+      if (idx === -1) continue;
+      const s = log.status ?? 'normal';
+      if (s in datasets) datasets[s][idx]++;
+    }
+
+    return {
+      labels: ranges.map(r => r.label),
+      datasets: [
+        { label: 'เบิกจ่าย',       data: datasets.normal,      color: '#27ae60' },
+        { label: 'ยืม',            data: datasets.borrowed,    color: '#2980b9' },
+        { label: 'ซ่อม',           data: datasets.repair,      color: '#f39c12' },
+        { label: 'ไม่พร้อมใช้งาน', data: datasets.unavailable, color: '#e74c3c' },
+        { label: 'จำหน่าย',        data: datasets.disposed,    color: '#95a5a6' },
+      ],
+    };
+  },
+
   // getHistory — แก้ bug: เติม . หน้า where()
   // ─────────────────────────────────────────────
   getHistory: async (equipmentUuid: string) => {

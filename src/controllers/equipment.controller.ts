@@ -172,4 +172,21 @@ export const equipmentController = {
       return errorResponse(c, error.message, 500);
     }
   },
+
+  // GET /api/equipment/stats/activity?period=week|month|fiscal
+  getActivityStats: async (c: Context) => {
+    try {
+      const user   = c.get('user');
+      const period = (c.req.query('period') || 'week') as 'week' | 'month' | 'fiscal';
+      const validPeriods = ['week', 'month', 'fiscal'];
+      if (!validPeriods.includes(period)) {
+        return errorResponse(c, 'period must be week, month or fiscal', 400);
+      }
+      const departmentId = isAdminOrManager(user) ? undefined : user.departmentId ?? undefined;
+      const data = await equipmentService.getActivityStats(period, departmentId);
+      return successResponse(c, data, 'Activity stats retrieved successfully');
+    } catch (error: any) {
+      return errorResponse(c, error.message, 500);
+    }
+  },
 };

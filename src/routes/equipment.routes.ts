@@ -5,7 +5,8 @@ import { attachmentsController } from '../controllers/attachments.controller.js'
 const equipment = new Hono();
 
 equipment.get('/', equipmentController.getAll);
-equipment.get('/stats', equipmentController.getStats);
+equipment.get('/stats',          equipmentController.getStats);
+equipment.get('/stats/activity', equipmentController.getActivityStats);
 equipment.get('/code/:code', equipmentController.getByCode);
 equipment.get('/:uuid/history', equipmentController.getHistory);
 equipment.get('/:uuid', equipmentController.getByUuid);

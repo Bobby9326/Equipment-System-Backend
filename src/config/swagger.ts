@@ -348,6 +348,94 @@ export const swaggerConfig = {
       },
     },
 
+    '/api/equipment/stats/activity': {
+      get: {
+        tags: ['Equipment'],
+        summary: 'สถิติการใช้งานครุภัณฑ์สำหรับ Dashboard',
+        description: [
+          'ดึงข้อมูลสถิติการเปลี่ยนสถานะครุภัณฑ์ สำหรับแสดงกราฟใน Dashboard',
+          '',
+          '**period:**',
+          '- `week` — 7 วันย้อนหลัง (แกน X = วัน จ-อา)',
+          '- `month` — 4 สัปดาห์ย้อนหลัง (แกน X = สัปดาห์ที่ 1-4)',
+          '- `fiscal` — ปีงบประมาณปัจจุบัน ต.ค.-ก.ย. (แกน X = 12 เดือน)',
+          '',
+          '**สิทธิ์:** user ทั่วไปเห็นเฉพาะ department ตัวเอง, admin เห็นทั้งหมด',
+        ].join('\n'),
+        parameters: [
+          {
+            name: 'period', in: 'query', required: false,
+            schema: { type: 'string', enum: ['week', 'month', 'fiscal'], default: 'week' },
+            description: 'ช่วงเวลาที่ต้องการดูสถิติ',
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Success',
+            content: {
+              'application/json': {
+                examples: {
+                  week: {
+                    summary: 'period=week (7 วันย้อนหลัง)',
+                    value: {
+                      success: true,
+                      message: 'Activity stats retrieved successfully',
+                      data: {
+                        labels: ['จ 22/3','อ 23/3','พ 24/3','พฤ 25/3','ศ 26/3','ส 27/3','อา 28/3'],
+                        datasets: [
+                          { label: 'เบิกจ่าย',       data: [3,1,5,2,4,0,1], color: '#27ae60' },
+                          { label: 'ยืม',            data: [1,0,2,0,1,0,0], color: '#2980b9' },
+                          { label: 'ซ่อม',           data: [0,1,0,1,0,0,0], color: '#f39c12' },
+                          { label: 'ไม่พร้อมใช้งาน', data: [0,0,0,0,0,0,0], color: '#e74c3c' },
+                          { label: 'จำหน่าย',        data: [0,0,0,0,0,0,0], color: '#95a5a6' },
+                        ],
+                      },
+                    },
+                  },
+                  month: {
+                    summary: 'period=month (4 สัปดาห์ย้อนหลัง)',
+                    value: {
+                      success: true,
+                      message: 'Activity stats retrieved successfully',
+                      data: {
+                        labels: ['สัปดาห์ที่ 1','สัปดาห์ที่ 2','สัปดาห์ที่ 3','สัปดาห์ที่ 4'],
+                        datasets: [
+                          { label: 'เบิกจ่าย',       data: [12,8,15,6],  color: '#27ae60' },
+                          { label: 'ยืม',            data: [3,2,5,1],    color: '#2980b9' },
+                          { label: 'ซ่อม',           data: [1,0,2,1],    color: '#f39c12' },
+                          { label: 'ไม่พร้อมใช้งาน', data: [0,0,0,0],    color: '#e74c3c' },
+                          { label: 'จำหน่าย',        data: [0,0,0,0],    color: '#95a5a6' },
+                        ],
+                      },
+                    },
+                  },
+                  fiscal: {
+                    summary: 'period=fiscal (ปีงบประมาณ ต.ค.-ก.ย.)',
+                    value: {
+                      success: true,
+                      message: 'Activity stats retrieved successfully',
+                      data: {
+                        labels: ['ต.ค.','พ.ย.','ธ.ค.','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.'],
+                        datasets: [
+                          { label: 'เบิกจ่าย',       data: [20,15,10,8,12,18,0,0,0,0,0,0], color: '#27ae60' },
+                          { label: 'ยืม',            data: [5,3,4,2,6,8,0,0,0,0,0,0],      color: '#2980b9' },
+                          { label: 'ซ่อม',           data: [2,1,0,3,1,2,0,0,0,0,0,0],      color: '#f39c12' },
+                          { label: 'ไม่พร้อมใช้งาน', data: [0,0,1,0,0,0,0,0,0,0,0,0],      color: '#e74c3c' },
+                          { label: 'จำหน่าย',        data: [0,0,0,0,0,0,0,0,0,0,0,0],      color: '#95a5a6' },
+                        ],
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'period must be week, month or fiscal' },
+          '401': { description: 'Unauthorized' },
+        },
+      },
+    },
+
     '/api/equipment/code/{code}': {
       get: {
         tags: ['Equipment'],
