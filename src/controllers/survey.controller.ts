@@ -18,9 +18,11 @@ export const surveyReportController = {
 
       const pdfBuffer = await equipmentReportService.generateSurveyPdf({ budgetYear, departmentId });
 
-      const fileName = departmentId
-        ? `survey_report_${budgetYear}_dept${departmentId}.pdf`
-        : `survey_report_${budgetYear}.pdf`;
+      // ชื่อไฟล์: Equipment_Survey_Report_FY2568_Dept1_20260328.pdf
+      const now      = new Date();
+      const dateStr  = now.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
+      const deptPart = departmentId ? `_Dept${departmentId}` : '';
+      const fileName = `Equipment_Survey_Report_FY${budgetYear}${deptPart}_${dateStr}.pdf`;
 
       c.header('Content-Type',        'application/pdf');
       c.header('Content-Disposition', `attachment; filename="${fileName}"`);
