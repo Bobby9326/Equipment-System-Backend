@@ -274,10 +274,15 @@ export const swaggerConfig = {
                   acquisitionDate:     { type: 'string', format: 'date' },
                   company:             { type: 'string' },
                   sizeDetail:          { type: 'string' },
-                  buildingId:          { type: 'integer' },
-                  roomId:              { type: 'integer' },
-                  projectId:           { type: 'integer', description: 'project ที่ซื้อมา' },
-                  receivingMhesiId:    { type: 'integer', description: 'MHESI receiving ที่ครุภัณฑ์นี้มาจาก (ระบุรอบรับมอบ)' },
+                  buildingId:           { type: 'integer' },
+                  roomId:               { type: 'integer' },
+                  floor:                { type: 'string',  description: 'ชั้นที่ตั้ง เช่น 3, B1' },
+                  warrantyYears:        { type: 'integer', description: 'ระยะเวลาประกัน (ปี)' },
+                  warrantyMonths:       { type: 'integer', description: 'ระยะเวลาประกัน (เดือน)' },
+                  warrantyEnd:          { type: 'string',  format: 'date', description: 'วันหมดประกัน' },
+                  warrantyAttachmentId: { type: 'integer', description: 'ไฟล์ใบประกัน — จาก POST /api/attachments/upload' },
+                  projectId:            { type: 'integer', description: 'project ที่ซื้อมา' },
+                  receivingMhesiId:     { type: 'string',  format: 'uuid', description: 'UUID ของ MHESI receiving (backend resolve เป็น id ให้)' },
                   note:                { type: 'string' },
                 },
               },
@@ -418,6 +423,11 @@ export const swaggerConfig = {
                     status:              'normal',
                     projectId:           1,
                     receivingMhesiId:    3,
+                    floor:               'ชั้น 3',
+                    warrantyYears:       3,
+                    warrantyMonths:      0,
+                    warrantyEnd:         '2029-03-01',
+                    warrantyAttachmentId: 5,
                     price:               '25000.00',
                     departmentId:        3,
                     acquisitionDate:     '2026-03-01',
@@ -907,8 +917,10 @@ export const swaggerConfig = {
                   projectDate:         { type: 'string', format: 'date' },
                   budget:              { type: 'number', description: 'วงเงินงบประมาณ' },
                   status:              { type: 'string' },
-                  acquisitionSourceId: { type: 'integer' },
-                  qtyOrdered:          { type: 'integer', description: 'จำนวนที่สั่งซื้อทั้งหมด (ใช้ตรวจสอบว่าลงทะเบียนครบหรือยัง)' },
+                  acquisitionSourceId:  { type: 'integer' },
+                  acquisitionMethodId:  { type: 'integer', description: 'วิธีการได้มา' },
+                  fiscalYear:           { type: 'integer', description: 'ปีงบประมาณ (พ.ศ.) เช่น 2568' },
+                  qtyOrdered:           { type: 'integer', description: 'จำนวนที่สั่งซื้อทั้งหมด (ใช้ตรวจสอบว่าลงทะเบียนครบหรือยัง)' },
                   note:                { type: 'string' },
                 },
               },
@@ -1081,6 +1093,62 @@ export const swaggerConfig = {
       },
     },
 
+    '/api/mhesi/{uuid}/attachments': {
+      get: {
+        tags: ['MHESI'],
+        summary: 'Get ไฟล์เพิ่มเติมของ MHESI',
+        parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        responses: {
+          '200': {
+            description: 'Success',
+            content: { 'application/json': { example: { success: true, data: [{ id: 8, fileName: 'doc.pdf', fileType: 'application/pdf', fileUrl: '/api/attachments/8/file' }] } } },
+          },
+          '404': { description: 'MHESI not found' },
+        },
+      },
+      post: {
+        tags: ['MHESI'],
+        summary: '⭐ อัปโหลดไฟล์เพิ่มเติมให้ MHESI (admin/dept1)',
+        description: 'อัปโหลดได้หลายไฟล์พร้อมกัน · บันทึก audit log อัตโนมัติ',
+        parameters: [{ name: 'uuid', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                properties: {
+                  files: { type: 'array', items: { type: 'string', format: 'binary' }, description: 'หลายไฟล์' },
+                  file:  { type: 'string', format: 'binary', description: 'ไฟล์เดียว' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': { description: 'Uploaded' },
+          '400': { description: 'ไม่มีไฟล์' },
+          '403': { description: 'admin/dept1 เท่านั้น' },
+          '404': { description: 'MHESI not found' },
+        },
+      },
+    },
+    '/api/mhesi/{uuid}/attachments/{attachmentId}': {
+      delete: {
+        tags: ['MHESI'],
+        summary: 'ลบไฟล์เพิ่มเติมของ MHESI (admin/dept1)',
+        description: 'ลบ junction + ไฟล์จริง · บันทึก audit log อัตโนมัติ',
+        parameters: [
+          { name: 'uuid',         in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+          { name: 'attachmentId', in: 'path', required: true, schema: { type: 'integer' } },
+        ],
+        responses: {
+          '200': { description: 'Deleted' },
+          '403': { description: 'admin/dept1 เท่านั้น' },
+          '404': { description: 'Not found' },
+        },
+      },
+    },
     '/api/mhesi/project/{projectId}': {
       get: {
         tags: ['MHESI'],
@@ -1267,6 +1335,36 @@ export const swaggerConfig = {
           },
           '400': { description: 'startDate หรือ endDate is required' },
           '403': { description: 'ไม่มีสิทธิ์ดูข้อมูล department อื่น' },
+        },
+      },
+    },
+
+    // ==================== REPORTS (survey) ====================
+
+    '/api/reports/survey': {
+      get: {
+        tags: ['Reports'],
+        summary: 'ออกรายงานสำรวจครุภัณฑ์หน่วยงาน (PDF)',
+        description: [
+          'ออกรายงานสำรวจครุภัณฑ์ประจำปีงบประมาณ เป็นไฟล์ PDF',
+          '',
+          '**การจัดกลุ่มข้อมูล:**',
+          '1. แบ่งตาม department',
+          '2. แบ่งตาม fiscalYear (ปีงบประมาณที่จัดซื้อ ≤ budgetYear)',
+          '3. แบ่งตามแหล่งเงินทุน (acquisitionSource)',
+          '4. แบ่งตาม project',
+          '',
+          '**คอลัมน์ในรายงาน:** ลำดับ, รายการครุภัณฑ์, หมายเลขครุภัณฑ์,',
+          'รอเบิกจ่าย, ปกติ, ซ่อม, ไม่พร้อมใช้งาน, จำหน่ายทิ้ง, อายุการใช้งาน, อายุสุทธิ',
+        ].join('\n'),
+        parameters: [
+          { name: 'budgetYear',   in: 'query', required: true,  schema: { type: 'integer' }, description: 'ปีงบประมาณ (พ.ศ.) เช่น 2568 — แสดงครุภัณฑ์ที่ fiscalYear ≤ ค่านี้' },
+          { name: 'departmentId', in: 'query', required: false, schema: { type: 'integer' }, description: 'ถ้าไม่ระบุ จะออกรายงานทุก department' },
+        ],
+        responses: {
+          '200': { description: 'PDF file — Content-Type: application/pdf, Content-Disposition: attachment' },
+          '400': { description: 'budgetYear is required' },
+          '401': { description: 'Unauthorized' },
         },
       },
     },
