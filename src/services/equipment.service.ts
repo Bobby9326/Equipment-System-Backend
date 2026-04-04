@@ -346,19 +346,30 @@ export const equipmentService = {
   },
 
   updateByUuid: async (uuid: string, data: Partial<typeof equipment.$inferInsert>, userUuid?: string) => {
-    
-    // ✅ แก้: ดึง before เฉพาะ EQUIPMENT_SELECT ไม่ต้องการ trace fields
+
+    // ✅ resolve receivingMhesiId: UUID string → integer id
+    let resolvedData: typeof data = { ...data };
+    if (data.receivingMhesiId && typeof data.receivingMhesiId === 'string' && (data.receivingMhesiId as string).includes('-')) {
+      const mhesiRow = await db
+        .select({ id: mhesiNumbers.id })
+        .from(mhesiNumbers)
+        .where(eq(mhesiNumbers.uuid, data.receivingMhesiId as string));
+      if (!mhesiRow[0]) throw new BusinessError('ไม่พบใบตรวจรับ MHESI');
+      resolvedData = { ...data, receivingMhesiId: mhesiRow[0].id };
+    }
+
+    // ✅ ดึง before เฉพาะ EQUIPMENT_SELECT ไม่ต้องการ trace fields
     const beforeResult = await db
       .select(EQUIPMENT_SELECT)
       .from(equipment)
       .where(and(eq(equipment.uuid, uuid), isNull(equipment.deletedAt)));
-    
+
     if (!beforeResult[0]) return null;
     const before = beforeResult[0];
 
     const result = await db
       .update(equipment)
-      .set({ ...data, updatedAt: new Date() })
+      .set({ ...resolvedData, updatedAt: new Date() })
       .where(and(eq(equipment.uuid, uuid), isNull(equipment.deletedAt)))
       .returning(EQUIPMENT_SELECT);
 
