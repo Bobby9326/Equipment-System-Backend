@@ -38,7 +38,7 @@ const calcDepreciation = (
 
   const accumulatedAfter = parseFloat((accumulatedBefore + depThisYear).toFixed(2));
   const bookValueStart   = parseFloat((price - accumulatedBefore).toFixed(2));
-  const bookValueEnd     = parseFloat((price - accumulatedAfter).toFixed(2));
+  const bookValueEnd     = Math.max(1, parseFloat((price - accumulatedAfter).toFixed(2)));
 
   return { depreciationPerYear: parseFloat(depPerYear.toFixed(2)), accumulatedBefore, depreciationThisYear: depThisYear, accumulatedAfter, bookValueStart, bookValueEnd };
 };
