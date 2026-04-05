@@ -1,13 +1,12 @@
 import { db } from '../config/database.js';
 import {
   equipment,
-  equipmentNormals,
   equipmentBorrows,
   equipmentRepairs,
-  equipmentUnavailable,
   equipmentDisposals,
-  equipmentStatusLogs,
+  auditLogs,
   users,
+  equipmentAttachments,
 } from '../db/schema/index.js';
 import { eq, isNull, and, inArray } from 'drizzle-orm';
 import { BusinessError } from '../middlewares/error.js';
@@ -18,22 +17,13 @@ import { BusinessError } from '../middlewares/error.js';
 
 type NewStatus = 'pending' | 'normal' | 'borrowed' | 'repair' | 'unavailable' | 'disposed';
 
-const STATUS_REFERENCE_TABLE: Record<NewStatus, string | null> = {
-  pending:     null,
-  normal:      'equipment_normals',
-  borrowed:    'equipment_borrows',
-  repair:      'equipment_repairs',
-  unavailable: 'equipment_unavailable',
-  disposed:    'equipment_disposals',
-};
-
 const BLOCKED_TRANSITIONS: Record<NewStatus, NewStatus[]> = {
-  pending:     ['disposed'],
+  pending:     ['pending', 'normal', 'borrowed', 'repair', 'unavailable', 'disposed'],
   normal:      ['disposed'],
-  borrowed:    ['disposed'],
-  repair:      ['disposed'],
-  unavailable: ['disposed'],
-  disposed:    ['pending', 'normal', 'borrowed', 'repair', 'unavailable', 'disposed'],
+  borrowed:    ['pending','disposed'],
+  repair:      ['pending','disposed'],
+  unavailable: ['pending','disposed'],
+  disposed:    ['pending'],
 };
 
 export const changeStatusService = {
@@ -48,8 +38,20 @@ export const changeStatusService = {
 
     const [userResult, equipmentList] = await Promise.all([
       db.select({ id: users.id }).from(users).where(eq(users.uuid, userUuid)),
-      db
-        .select({ id: equipment.id, uuid: equipment.uuid, status: equipment.status, equipmentCode: equipment.equipmentCode })
+      db.select({
+          id:              equipment.id,
+          uuid:            equipment.uuid,
+          status:          equipment.status,
+          equipmentCode:   equipment.equipmentCode,
+          equipmentName:   equipment.equipmentName,
+          equipmentNumber: equipment.equipmentNumber,
+          equipmentTypeId: equipment.equipmentTypeId,
+          departmentId:    equipment.departmentId,
+          fiscalYear:      equipment.fiscalYear,
+          price:           equipment.price,
+          acquisitionDate: equipment.acquisitionDate,
+          projectId:       equipment.projectId,
+        })
         .from(equipment)
         .where(and(inArray(equipment.uuid, equipmentUuids), isNull(equipment.deletedAt))),
     ]);
@@ -58,17 +60,15 @@ export const changeStatusService = {
     const userId = userResult[0].id;
 
     if (equipmentList.length !== equipmentUuids.length) {
-      const foundUuids = equipmentList.map((e) => e.uuid);
-      const notFound   = equipmentUuids.filter((uuid) => !foundUuids.includes(uuid));
+      const foundUuids = equipmentList.map(e => e.uuid);
+      const notFound   = equipmentUuids.filter(uuid => !foundUuids.includes(uuid));
       throw new BusinessError(`ไม่พบครุภัณฑ์ uuid: ${notFound.join(', ')}`);
     }
 
     for (const e of equipmentList) {
       const current = e.status as NewStatus;
       if (BLOCKED_TRANSITIONS[newStatus].includes(current)) {
-        throw new BusinessError(
-          `ครุภัณฑ์ ${e.equipmentCode} สถานะ "${current}" ไม่สามารถเปลี่ยนเป็น "${newStatus}" ได้`
-        );
+        throw new BusinessError(`ครุภัณฑ์ ${e.equipmentCode} สถานะ "${current}" ไม่สามารถเปลี่ยนเป็น "${newStatus}" ได้`);
       }
       if (current === newStatus) {
         throw new BusinessError(`ครุภัณฑ์ ${e.equipmentCode} มีสถานะ "${current}" อยู่แล้ว`);
@@ -81,164 +81,145 @@ export const changeStatusService = {
       for (const e of equipmentList) {
         const current = e.status as NewStatus;
 
-        // --- ปิด record เก่า ---
+        // ── ปิด record เก่า ──────────────────────────────────
         if (current === 'borrowed') {
-          await tx
-            .update(equipmentBorrows)
+          await tx.update(equipmentBorrows)
             .set({ actualReturnDate: today })
-            .where(and(
-              eq(equipmentBorrows.equipmentId, e.id),
-              isNull(equipmentBorrows.actualReturnDate),
-            ));
+            .where(and(eq(equipmentBorrows.equipmentId, e.id), isNull(equipmentBorrows.actualReturnDate)));
         }
         if (current === 'repair') {
-          await tx
-            .update(equipmentRepairs)
+          await tx.update(equipmentRepairs)
             .set({ actualEndDate: today })
-            .where(and(
-              eq(equipmentRepairs.equipmentId, e.id),
-              isNull(equipmentRepairs.actualEndDate),
-            ));
+            .where(and(eq(equipmentRepairs.equipmentId, e.id), isNull(equipmentRepairs.actualEndDate)));
         }
 
-        // --- สร้าง record ใหม่ ---
-        let newRecord: any;
+        // ── build auditAfter + สร้าง record ใหม่ ─────────────
+        let auditAfter: Record<string, any> = { status: newStatus };
 
         if (newStatus === 'normal') {
           if (current === 'pending') {
-            // ✅ pending → normal = เบิกจ่าย — ต้องการ disbursedTo และ disbursedDate
             if (!data.disbursedTo)   throw new BusinessError('disbursedTo is required');
             if (!data.disbursedDate) throw new BusinessError('disbursedDate is required');
-
-            const [record] = await tx
-              .insert(equipmentNormals)
-              .values({
-                equipmentId:   e.id,
-                disbursedTo:   data.disbursedTo,
-                disbursedDate: data.disbursedDate,
-                roomId:        data.roomId   ?? null,
-                reason:        data.reason   ?? null,
-                createdBy:     userId,
-              })
-              .returning();
-            newRecord = record;
+            auditAfter = { status: 'normal', disbursedTo: data.disbursedTo, disbursedDate: data.disbursedDate, roomId: data.roomId ?? null, reason: data.reason ?? null };
           } else {
-            // normal จากสถานะอื่น (คืนจากยืม/ซ่อม)
-            const [record] = await tx
-              .insert(equipmentNormals)
-              .values({ equipmentId: e.id, reason: data.reason ?? null, createdBy: userId })
-              .returning();
-            newRecord = record;
+            auditAfter = { status: 'normal', reason: data.reason ?? null };
           }
         }
 
         if (newStatus === 'borrowed') {
           if (!data.borrowerName) throw new BusinessError('borrowerName is required');
           if (!data.borrowDate)   throw new BusinessError('borrowDate is required');
-          const [record] = await tx
-            .insert(equipmentBorrows)
-            .values({
-              equipmentId:          e.id,
-              borrowerName:         data.borrowerName,
-              borrowerDepartmentId: data.borrowerDepartmentId ?? null,
-              borrowDate:           data.borrowDate,
-              expectedReturnDate:   data.expectedReturnDate   ?? null,
-              borrowingBuildingId:  data.borrowingBuildingId  ?? null,
-              borrowingRoomId:      data.borrowingRoomId      ?? null,
-              reason:               data.reason               ?? null,
-              createdBy:            userId,
-            })
-            .returning();
-          newRecord = record;
+
+          const [record] = await tx.insert(equipmentBorrows).values({
+            equipmentId:          e.id,
+            borrowerName:         data.borrowerName,
+            borrowerDepartmentId: data.borrowerDepartmentId ?? null,
+            borrowDate:           data.borrowDate,
+            expectedReturnDate:   data.expectedReturnDate   ?? null,
+            borrowingBuildingId:  data.borrowingBuildingId  ?? null,
+            borrowingRoomId:      data.borrowingRoomId      ?? null,
+            reason:               data.reason               ?? null,
+            createdBy:            userId,
+          }).returning();
+
+          auditAfter = { status: 'borrowed', borrowerName: data.borrowerName, borrowDate: data.borrowDate, expectedReturnDate: data.expectedReturnDate ?? null, borrowingBuildingId: data.borrowingBuildingId ?? null, borrowingRoomId: data.borrowingRoomId ?? null, reason: data.reason ?? null, borrowRecordId: record.id };
         }
 
         if (newStatus === 'repair') {
           if (!data.repairReason) throw new BusinessError('repairReason is required');
           if (!data.startDate)    throw new BusinessError('startDate is required');
-          const [record] = await tx
-            .insert(equipmentRepairs)
-            .values({
-              equipmentId:   e.id,
-              repairReason:  data.repairReason,
-              repairCompany: data.repairCompany ?? null,
-              cost:          data.cost          ?? null,
-              startDate:     data.startDate,
-              endDate:       data.endDate        ?? null,
-              attachmentId:  data.attachmentId   ?? null,
-              createdBy:     userId,
-            })
-            .returning();
-          newRecord = record;
+
+          const [record] = await tx.insert(equipmentRepairs).values({
+            equipmentId:   e.id,
+            repairReason:  data.repairReason,
+            repairCompany: data.repairCompany ?? null,
+            cost:          data.cost          ?? null,
+            startDate:     data.startDate,
+            endDate:       data.endDate        ?? null,
+            attachmentId:  data.attachmentId   ?? null,
+            createdBy:     userId,
+          }).returning();
+
+          auditAfter = { status: 'repair', repairReason: data.repairReason, repairCompany: data.repairCompany ?? null, cost: data.cost ?? null, startDate: data.startDate, endDate: data.endDate ?? null, attachmentId: data.attachmentId ?? null, repairRecordId: record.id };
         }
 
         if (newStatus === 'unavailable') {
           if (!data.reason) throw new BusinessError('reason is required');
-          const [record] = await tx
-            .insert(equipmentUnavailable)
-            .values({ equipmentId: e.id, reason: data.reason, createdBy: userId })
-            .returning();
-          newRecord = record;
+          auditAfter = { status: 'unavailable', reason: data.reason };
         }
 
+        // ── disposed: copy ไป archive แล้ว hard delete ────────
         if (newStatus === 'disposed') {
           if (!data.disposalDate) throw new BusinessError('disposalDate is required');
-          const [record] = await tx
-            .insert(equipmentDisposals)
-            .values({
-              equipmentId:    e.id,
-              disposalDate:   data.disposalDate,
-              disposalMethod: data.disposalMethod ?? null,
-              cost:           data.cost           ?? null,
-              approvedBy:     data.approvedBy     ?? null,
-              reason:         data.reason         ?? null,
-              attachmentId:   data.attachmentId   ?? null,
-              createdBy:      userId,
-            })
-            .returning();
-          newRecord = record;
+
+          await tx.insert(equipmentDisposals).values({
+            uuid:            e.uuid,
+            equipmentCode:   e.equipmentCode,
+            equipmentName:   e.equipmentName,
+            equipmentNumber: e.equipmentNumber,
+            equipmentTypeId: e.equipmentTypeId,
+            departmentId:    e.departmentId,
+            fiscalYear:      e.fiscalYear,
+            price:           e.price,
+            acquisitionDate: e.acquisitionDate,
+            projectId:       e.projectId,
+            disposalDate:    data.disposalDate,
+            disposalMethod:  data.disposalMethod ?? null,
+            cost:            data.cost           ?? null,
+            approvedBy:      data.approvedBy     ?? null,
+            reason:          data.reason         ?? null,
+            attachmentId:    data.attachmentId   ?? null,
+            disposedBy:      userId,
+          });
+
+          await tx.insert(auditLogs).values({
+            entity:     'equipment',
+            entityUuid: e.uuid,
+            action:     'status_change',
+            before:     { status: current },
+            after:      { status: 'disposed', disposalDate: data.disposalDate, disposalMethod: data.disposalMethod ?? null, reason: data.reason ?? null },
+            changedBy:  userId,
+          });
+
+          // ✅ ลบ related records ก่อน (FK constraint)
+          await tx.delete(equipmentAttachments).where(eq(equipmentAttachments.equipmentId, e.id));
+          await tx.delete(equipmentBorrows).where(eq(equipmentBorrows.equipmentId, e.id));
+          await tx.delete(equipmentRepairs).where(eq(equipmentRepairs.equipmentId, e.id));
+
+          await tx.delete(equipment).where(eq(equipment.id, e.id));
+          results.push({ equipmentUuid: e.uuid, newStatus: 'disposed' });
+          continue;
         }
 
-        // --- อัปเดต equipment ---
-        // ✅ แก้: ตอน pending→normal อัปเดต departmentId, buildingId, roomId ด้วย
-        // ✅ แก้: ตอนอื่นๆ อัปเดตเฉพาะ status
-        const equipmentUpdate: Record<string, any> = {
-          status:    newStatus,
-          updatedAt: new Date(),
-        };
+        // ── อัปเดต equipment (ยกเว้น disposed) ──────────────
+        const equipmentUpdate: Record<string, any> = { status: newStatus, updatedAt: new Date() };
 
         if (newStatus === 'normal' && current === 'pending') {
-          // เบิกจ่าย — บันทึกที่ตั้งปัจจุบันลง equipment
           if (data.departmentId != null) equipmentUpdate.departmentId = data.departmentId;
           if (data.buildingId   != null) equipmentUpdate.buildingId   = data.buildingId;
           if (data.roomId       != null) equipmentUpdate.roomId       = data.roomId;
           if (data.floor        != null) equipmentUpdate.floor        = data.floor;
         }
-
         if (newStatus === 'borrowed') {
-          // ยืม — อัปเดตตำแหน่งที่ยืมไปลง equipment
           if (data.borrowingBuildingId != null) equipmentUpdate.buildingId = data.borrowingBuildingId;
           if (data.borrowingRoomId     != null) equipmentUpdate.roomId     = data.borrowingRoomId;
           if (data.floor               != null) equipmentUpdate.floor      = data.floor;
         }
+      
+        await tx.update(equipment).set(equipmentUpdate).where(eq(equipment.id, e.id));
 
-        await tx
-          .update(equipment)
-          .set(equipmentUpdate)
-          .where(eq(equipment.id, e.id));
-
-        // --- บันทึก status log ---
-        const referenceTable = STATUS_REFERENCE_TABLE[newStatus];
-
-        await tx.insert(equipmentStatusLogs).values({
-          equipmentId:    e.id,
-          status:         newStatus,
-          referenceTable,
-          referenceId:    newRecord?.id ?? null,
-          remark:         data.remark   ?? null,
-          createdBy:      userId,
+        if (data.remark != null) {auditAfter.remark = data.remark;}
+        // ── audit log ─────────────────────────────────────────
+        await tx.insert(auditLogs).values({
+          entity:     'equipment',
+          entityUuid: e.uuid,
+          action:     'status_change',
+          before:     { status: current },
+          after:      auditAfter,
+          changedBy:  userId,
         });
 
-        results.push({ equipmentUuid: e.uuid, newStatus, referenceId: newRecord?.id });
+        results.push({ equipmentUuid: e.uuid, newStatus });
       }
 
       return results;
@@ -247,148 +228,32 @@ export const changeStatusService = {
 };
 
 // ============================================================
-// INDIVIDUAL STATUS TABLES — GET / UPDATE / DELETE เท่านั้น
+// BORROWS — ยังใช้ table เพราะต้องการ actualReturnDate IS NULL
 // ============================================================
 
 const resolveEquipmentId = async (uuid: string): Promise<number> => {
-  const result = await db
-    .select({ id: equipment.id })
-    .from(equipment)
+  const result = await db.select({ id: equipment.id }).from(equipment)
     .where(and(eq(equipment.uuid, uuid), isNull(equipment.deletedAt)));
   if (!result[0]) throw new BusinessError('ไม่พบครุภัณฑ์');
   return result[0].id;
 };
 
-export const equipmentNormalsService = {
-  getAll: async () =>
-    db
-      .select({
-        equipmentUuid:   equipment.uuid,
-        equipmentNumber: equipment.equipmentNumber,
-        disbursedTo:          equipmentNormals.disbursedTo,
-        disbursedDate:        equipmentNormals.disbursedDate,
-        roomId:               equipmentNormals.roomId,
-        reason:               equipmentNormals.reason,
-        createdBy:            users.firstName,
-        createdAt:            equipmentNormals.createdAt,
-      })
-      .from(equipmentNormals)
-      .leftJoin(equipment, eq(equipmentNormals.equipmentId, equipment.id))
-      .leftJoin(users, eq(equipmentNormals.createdBy, users.id)),
-
-  getByEquipmentUuid: async (uuid: string) => {
-    const equipmentId = await resolveEquipmentId(uuid);
-    return db
-      .select({
-        equipmentUuid:   equipment.uuid,
-        equipmentNumber: equipment.equipmentNumber,
-        disbursedTo:          equipmentNormals.disbursedTo,
-        disbursedDate:        equipmentNormals.disbursedDate,
-        roomId:               equipmentNormals.roomId,
-        reason:               equipmentNormals.reason,
-        createdBy:            users.firstName,
-        createdAt:            equipmentNormals.createdAt,
-      })
-      .from(equipmentNormals)
-      .leftJoin(equipment, eq(equipmentNormals.equipmentId, equipment.id))
-      .leftJoin(users, eq(equipmentNormals.createdBy, users.id))
-      .where(eq(equipmentNormals.equipmentId, equipmentId));
-  },
-
-  getById: async (id: number) => {
-    const result = await db
-      .select({
-        equipmentUuid:   equipment.uuid,
-        equipmentNumber: equipment.equipmentNumber,
-        disbursedTo:          equipmentNormals.disbursedTo,
-        disbursedDate:        equipmentNormals.disbursedDate,
-        roomId:               equipmentNormals.roomId,
-        reason:               equipmentNormals.reason,
-        createdBy:            users.firstName,
-        createdAt:            equipmentNormals.createdAt,
-      })
-      .from(equipmentNormals)
-      .leftJoin(equipment, eq(equipmentNormals.equipmentId, equipment.id))
-      .leftJoin(users, eq(equipmentNormals.createdBy, users.id))
-      .where(eq(equipmentNormals.id, id));
-    return result[0] || null;
-  },
-
-  update: async (id: number, data: Partial<typeof equipmentNormals.$inferInsert>) => {
-    const result = await db.update(equipmentNormals).set(data).where(eq(equipmentNormals.id, id)).returning();
-    return result[0] || null;
-  },
-
-  delete: async (id: number) => {
-    const result = await db.delete(equipmentNormals).where(eq(equipmentNormals.id, id)).returning();
-    return result[0] || null;
-  },
-};
-
 export const equipmentBorrowsService = {
   getAll: async () =>
-    db
-      .select({
-        equipmentUuid:        equipment.uuid,
-        equipmentNumber:      equipment.equipmentNumber,
-        borrowerName:         equipmentBorrows.borrowerName,
-        borrowerDepartmentId: equipmentBorrows.borrowerDepartmentId,
-        borrowDate:           equipmentBorrows.borrowDate,
-        expectedReturnDate:   equipmentBorrows.expectedReturnDate,
-        actualReturnDate:     equipmentBorrows.actualReturnDate,
-        borrowingBuildingId:  equipmentBorrows.borrowingBuildingId,
-        borrowingRoomId:      equipmentBorrows.borrowingRoomId,
-        reason:               equipmentBorrows.reason,
-        createdBy:            users.firstName,
-        createdAt:            equipmentBorrows.createdAt,
-      })
-      .from(equipmentBorrows)
-      .leftJoin(equipment, eq(equipmentBorrows.equipmentId, equipment.id))
-      .leftJoin(users, eq(equipmentBorrows.createdBy, users.id)),
+    db.select({ equipmentUuid: equipment.uuid, equipmentNumber: equipment.equipmentNumber, borrowerName: equipmentBorrows.borrowerName, borrowerDepartmentId: equipmentBorrows.borrowerDepartmentId, borrowDate: equipmentBorrows.borrowDate, expectedReturnDate: equipmentBorrows.expectedReturnDate, actualReturnDate: equipmentBorrows.actualReturnDate, borrowingBuildingId: equipmentBorrows.borrowingBuildingId, borrowingRoomId: equipmentBorrows.borrowingRoomId, reason: equipmentBorrows.reason, createdBy: users.firstName, createdAt: equipmentBorrows.createdAt })
+    .from(equipmentBorrows).leftJoin(equipment, eq(equipmentBorrows.equipmentId, equipment.id)).leftJoin(users, eq(equipmentBorrows.createdBy, users.id)),
 
   getByEquipmentUuid: async (uuid: string) => {
     const equipmentId = await resolveEquipmentId(uuid);
-    return db
-      .select({
-        equipmentUuid:        equipment.uuid,
-        equipmentNumber:      equipment.equipmentNumber,
-        borrowerName:         equipmentBorrows.borrowerName,
-        borrowerDepartmentId: equipmentBorrows.borrowerDepartmentId,
-        borrowDate:           equipmentBorrows.borrowDate,
-        expectedReturnDate:   equipmentBorrows.expectedReturnDate,
-        actualReturnDate:     equipmentBorrows.actualReturnDate,
-        borrowingBuildingId:  equipmentBorrows.borrowingBuildingId,
-        borrowingRoomId:      equipmentBorrows.borrowingRoomId,
-        reason:               equipmentBorrows.reason,
-        createdBy:            users.firstName,
-        createdAt:            equipmentBorrows.createdAt,
-      })
-      .from(equipmentBorrows)
-      .leftJoin(equipment, eq(equipmentBorrows.equipmentId, equipment.id))
-      .leftJoin(users, eq(equipmentBorrows.createdBy, users.id))
-      .where(eq(equipmentBorrows.equipmentId, equipmentId));
+    return db.select({ equipmentUuid: equipment.uuid, equipmentNumber: equipment.equipmentNumber, borrowerName: equipmentBorrows.borrowerName, borrowerDepartmentId: equipmentBorrows.borrowerDepartmentId, borrowDate: equipmentBorrows.borrowDate, expectedReturnDate: equipmentBorrows.expectedReturnDate, actualReturnDate: equipmentBorrows.actualReturnDate, borrowingBuildingId: equipmentBorrows.borrowingBuildingId, borrowingRoomId: equipmentBorrows.borrowingRoomId, reason: equipmentBorrows.reason, createdBy: users.firstName, createdAt: equipmentBorrows.createdAt })
+    .from(equipmentBorrows).leftJoin(equipment, eq(equipmentBorrows.equipmentId, equipment.id)).leftJoin(users, eq(equipmentBorrows.createdBy, users.id))
+    .where(eq(equipmentBorrows.equipmentId, equipmentId));
   },
 
   getById: async (id: number) => {
-    const result = await db
-      .select({
-        equipmentUuid:        equipment.uuid,
-        equipmentNumber:      equipment.equipmentNumber,
-        borrowerName:         equipmentBorrows.borrowerName,
-        borrowerDepartmentId: equipmentBorrows.borrowerDepartmentId,
-        borrowDate:           equipmentBorrows.borrowDate,
-        expectedReturnDate:   equipmentBorrows.expectedReturnDate,
-        actualReturnDate:     equipmentBorrows.actualReturnDate,
-        borrowingBuildingId:  equipmentBorrows.borrowingBuildingId,
-        borrowingRoomId:      equipmentBorrows.borrowingRoomId,
-        reason:               equipmentBorrows.reason,
-        createdBy:            users.firstName,
-        createdAt:            equipmentBorrows.createdAt,
-      })
-      .from(equipmentBorrows)
-      .leftJoin(equipment, eq(equipmentBorrows.equipmentId, equipment.id))
-      .leftJoin(users, eq(equipmentBorrows.createdBy, users.id))
-      .where(eq(equipmentBorrows.id, id));
+    const result = await db.select({ equipmentUuid: equipment.uuid, equipmentNumber: equipment.equipmentNumber, borrowerName: equipmentBorrows.borrowerName, borrowerDepartmentId: equipmentBorrows.borrowerDepartmentId, borrowDate: equipmentBorrows.borrowDate, expectedReturnDate: equipmentBorrows.expectedReturnDate, actualReturnDate: equipmentBorrows.actualReturnDate, borrowingBuildingId: equipmentBorrows.borrowingBuildingId, borrowingRoomId: equipmentBorrows.borrowingRoomId, reason: equipmentBorrows.reason, createdBy: users.firstName, createdAt: equipmentBorrows.createdAt })
+    .from(equipmentBorrows).leftJoin(equipment, eq(equipmentBorrows.equipmentId, equipment.id)).leftJoin(users, eq(equipmentBorrows.createdBy, users.id))
+    .where(eq(equipmentBorrows.id, id));
     return result[0] || null;
   },
 
@@ -403,67 +268,26 @@ export const equipmentBorrowsService = {
   },
 };
 
+// ============================================================
+// REPAIRS — ยังใช้ table เพราะต้องการ actualEndDate IS NULL
+// ============================================================
+
 export const equipmentRepairsService = {
   getAll: async () =>
-    db
-      .select({
-        equipmentUuid:   equipment.uuid,
-        equipmentNumber: equipment.equipmentNumber,
-        repairReason:    equipmentRepairs.repairReason,
-        repairCompany:   equipmentRepairs.repairCompany,
-        cost:            equipmentRepairs.cost,
-        startDate:       equipmentRepairs.startDate,
-        endDate:         equipmentRepairs.endDate,
-        actualEndDate:   equipmentRepairs.actualEndDate,
-        attachmentId:    equipmentRepairs.attachmentId,
-        createdBy:       users.firstName,
-        createdAt:       equipmentRepairs.createdAt,
-      })
-      .from(equipmentRepairs)
-      .leftJoin(equipment, eq(equipmentRepairs.equipmentId, equipment.id))
-      .leftJoin(users, eq(equipmentRepairs.createdBy, users.id)),
+    db.select({ equipmentUuid: equipment.uuid, equipmentNumber: equipment.equipmentNumber, repairReason: equipmentRepairs.repairReason, repairCompany: equipmentRepairs.repairCompany, cost: equipmentRepairs.cost, startDate: equipmentRepairs.startDate, endDate: equipmentRepairs.endDate, actualEndDate: equipmentRepairs.actualEndDate, attachmentId: equipmentRepairs.attachmentId, createdBy: users.firstName, createdAt: equipmentRepairs.createdAt })
+    .from(equipmentRepairs).leftJoin(equipment, eq(equipmentRepairs.equipmentId, equipment.id)).leftJoin(users, eq(equipmentRepairs.createdBy, users.id)),
 
   getByEquipmentUuid: async (uuid: string) => {
     const equipmentId = await resolveEquipmentId(uuid);
-    return db
-      .select({
-        equipmentUuid:   equipment.uuid,
-        equipmentNumber: equipment.equipmentNumber,
-        repairReason:    equipmentRepairs.repairReason,
-        repairCompany:   equipmentRepairs.repairCompany,
-        cost:            equipmentRepairs.cost,
-        startDate:       equipmentRepairs.startDate,
-        endDate:         equipmentRepairs.endDate,
-        actualEndDate:   equipmentRepairs.actualEndDate,
-        attachmentId:    equipmentRepairs.attachmentId,
-        createdBy:       users.firstName,
-        createdAt:       equipmentRepairs.createdAt,
-      })
-      .from(equipmentRepairs)
-      .leftJoin(equipment, eq(equipmentRepairs.equipmentId, equipment.id))
-      .leftJoin(users, eq(equipmentRepairs.createdBy, users.id))
-      .where(eq(equipmentRepairs.equipmentId, equipmentId));
+    return db.select({ equipmentUuid: equipment.uuid, equipmentNumber: equipment.equipmentNumber, repairReason: equipmentRepairs.repairReason, repairCompany: equipmentRepairs.repairCompany, cost: equipmentRepairs.cost, startDate: equipmentRepairs.startDate, endDate: equipmentRepairs.endDate, actualEndDate: equipmentRepairs.actualEndDate, attachmentId: equipmentRepairs.attachmentId, createdBy: users.firstName, createdAt: equipmentRepairs.createdAt })
+    .from(equipmentRepairs).leftJoin(equipment, eq(equipmentRepairs.equipmentId, equipment.id)).leftJoin(users, eq(equipmentRepairs.createdBy, users.id))
+    .where(eq(equipmentRepairs.equipmentId, equipmentId));
   },
 
   getById: async (id: number) => {
-    const result = await db
-      .select({
-        equipmentUuid:   equipment.uuid,
-        equipmentNumber: equipment.equipmentNumber,
-        repairReason:    equipmentRepairs.repairReason,
-        repairCompany:   equipmentRepairs.repairCompany,
-        cost:            equipmentRepairs.cost,
-        startDate:       equipmentRepairs.startDate,
-        endDate:         equipmentRepairs.endDate,
-        actualEndDate:   equipmentRepairs.actualEndDate,
-        attachmentId:    equipmentRepairs.attachmentId,
-        createdBy:       users.firstName,
-        createdAt:       equipmentRepairs.createdAt,
-      })
-      .from(equipmentRepairs)
-      .leftJoin(equipment, eq(equipmentRepairs.equipmentId, equipment.id))
-      .leftJoin(users, eq(equipmentRepairs.createdBy, users.id))
-      .where(eq(equipmentRepairs.id, id));
+    const result = await db.select({ equipmentUuid: equipment.uuid, equipmentNumber: equipment.equipmentNumber, repairReason: equipmentRepairs.repairReason, repairCompany: equipmentRepairs.repairCompany, cost: equipmentRepairs.cost, startDate: equipmentRepairs.startDate, endDate: equipmentRepairs.endDate, actualEndDate: equipmentRepairs.actualEndDate, attachmentId: equipmentRepairs.attachmentId, createdBy: users.firstName, createdAt: equipmentRepairs.createdAt })
+    .from(equipmentRepairs).leftJoin(equipment, eq(equipmentRepairs.equipmentId, equipment.id)).leftJoin(users, eq(equipmentRepairs.createdBy, users.id))
+    .where(eq(equipmentRepairs.id, id));
     return result[0] || null;
   },
 
@@ -478,167 +302,15 @@ export const equipmentRepairsService = {
   },
 };
 
-export const equipmentUnavailableService = {
-  getAll: async () =>
-    db
-      .select({
-        equipmentUuid:   equipment.uuid,
-        equipmentNumber: equipment.equipmentNumber,
-        reason:          equipmentUnavailable.reason,
-        createdBy:       users.firstName,
-        createdAt:       equipmentUnavailable.createdAt,
-      })
-      .from(equipmentUnavailable)
-      .leftJoin(equipment, eq(equipmentUnavailable.equipmentId, equipment.id))
-      .leftJoin(users, eq(equipmentUnavailable.createdBy, users.id)),
-
-  getByEquipmentUuid: async (uuid: string) => {
-    const equipmentId = await resolveEquipmentId(uuid);
-    return db
-      .select({
-        equipmentUuid:   equipment.uuid,
-        equipmentNumber: equipment.equipmentNumber,
-        reason:          equipmentUnavailable.reason,
-        createdBy:       users.firstName,
-        createdAt:       equipmentUnavailable.createdAt,
-      })
-      .from(equipmentUnavailable)
-      .leftJoin(equipment, eq(equipmentUnavailable.equipmentId, equipment.id))
-      .leftJoin(users, eq(equipmentUnavailable.createdBy, users.id))
-      .where(eq(equipmentUnavailable.equipmentId, equipmentId));
-  },
-
-  getById: async (id: number) => {
-    const result = await db
-      .select({
-        equipmentUuid:   equipment.uuid,
-        equipmentNumber: equipment.equipmentNumber,
-        reason:          equipmentUnavailable.reason,
-        createdBy:       users.firstName,
-        createdAt:       equipmentUnavailable.createdAt,
-      })
-      .from(equipmentUnavailable)
-      .leftJoin(equipment, eq(equipmentUnavailable.equipmentId, equipment.id))
-      .leftJoin(users, eq(equipmentUnavailable.createdBy, users.id))
-      .where(eq(equipmentUnavailable.id, id));
-    return result[0] || null;
-  },
-
-  update: async (id: number, data: Partial<typeof equipmentUnavailable.$inferInsert>) => {
-    const result = await db.update(equipmentUnavailable).set(data).where(eq(equipmentUnavailable.id, id)).returning();
-    return result[0] || null;
-  },
-
-  delete: async (id: number) => {
-    const result = await db.delete(equipmentUnavailable).where(eq(equipmentUnavailable.id, id)).returning();
-    return result[0] || null;
-  },
-};
+// ============================================================
+// DISPOSALS — READ ONLY archive (ไม่มี update/delete)
+// ============================================================
 
 export const equipmentDisposalsService = {
-  getAll: async () =>
-    db
-      .select({
-        equipmentUuid:   equipment.uuid,
-        equipmentNumber: equipment.equipmentNumber,
-        disposalDate:    equipmentDisposals.disposalDate,
-        disposalMethod:  equipmentDisposals.disposalMethod,
-        cost:            equipmentDisposals.cost,
-        approvedBy:      equipmentDisposals.approvedBy,
-        reason:          equipmentDisposals.reason,
-        attachmentId:    equipmentDisposals.attachmentId,
-        createdBy:       users.firstName,
-        createdAt:       equipmentDisposals.createdAt,
-      })
-      .from(equipmentDisposals)
-      .leftJoin(equipment, eq(equipmentDisposals.equipmentId, equipment.id))
-      .leftJoin(users, eq(equipmentDisposals.createdBy, users.id)),
+  getAll: async () => db.select().from(equipmentDisposals),
 
-  getByEquipmentUuid: async (uuid: string) => {
-    const equipmentId = await resolveEquipmentId(uuid);
-    return db
-      .select({
-        equipmentUuid:   equipment.uuid,
-        equipmentNumber: equipment.equipmentNumber,
-        disposalDate:    equipmentDisposals.disposalDate,
-        disposalMethod:  equipmentDisposals.disposalMethod,
-        cost:            equipmentDisposals.cost,
-        approvedBy:      equipmentDisposals.approvedBy,
-        reason:          equipmentDisposals.reason,
-        attachmentId:    equipmentDisposals.attachmentId,
-        createdBy:       users.firstName,
-        createdAt:       equipmentDisposals.createdAt,
-      })
-      .from(equipmentDisposals)
-      .leftJoin(equipment, eq(equipmentDisposals.equipmentId, equipment.id))
-      .leftJoin(users, eq(equipmentDisposals.createdBy, users.id))
-      .where(eq(equipmentDisposals.equipmentId, equipmentId));
-  },
-
-  getById: async (id: number) => {
-    const result = await db
-      .select({
-        equipmentUuid:   equipment.uuid,
-        equipmentNumber: equipment.equipmentNumber,
-        disposalDate:    equipmentDisposals.disposalDate,
-        disposalMethod:  equipmentDisposals.disposalMethod,
-        cost:            equipmentDisposals.cost,
-        approvedBy:      equipmentDisposals.approvedBy,
-        reason:          equipmentDisposals.reason,
-        attachmentId:    equipmentDisposals.attachmentId,
-        createdBy:       users.firstName,
-        createdAt:       equipmentDisposals.createdAt,
-      })
-      .from(equipmentDisposals)
-      .leftJoin(equipment, eq(equipmentDisposals.equipmentId, equipment.id))
-      .leftJoin(users, eq(equipmentDisposals.createdBy, users.id))
-      .where(eq(equipmentDisposals.id, id));
+  getByUuid: async (uuid: string) => {
+    const result = await db.select().from(equipmentDisposals).where(eq(equipmentDisposals.uuid, uuid));
     return result[0] || null;
-  },
-
-  update: async (id: number, data: Partial<typeof equipmentDisposals.$inferInsert>) => {
-    const result = await db.update(equipmentDisposals).set(data).where(eq(equipmentDisposals.id, id)).returning();
-    return result[0] || null;
-  },
-
-  delete: async (id: number) => {
-    const result = await db.delete(equipmentDisposals).where(eq(equipmentDisposals.id, id)).returning();
-    return result[0] || null;
-  },
-};
-
-export const equipmentStatusLogsService = {
-  getAll: async () =>
-    db
-      .select({
-        equipmentUuid:  equipment.uuid,
-        status:         equipmentStatusLogs.status,
-        referenceTable: equipmentStatusLogs.referenceTable,
-        referenceId:    equipmentStatusLogs.referenceId,
-        remark:         equipmentStatusLogs.remark,
-        createdBy:      users.firstName,
-        createdAt:      equipmentStatusLogs.createdAt,
-      })
-      .from(equipmentStatusLogs)
-      .leftJoin(equipment, eq(equipmentStatusLogs.equipmentId, equipment.id))
-      .leftJoin(users, eq(equipmentStatusLogs.createdBy, users.id)),
-
-  getByEquipmentUuid: async (uuid: string) => {
-    const equipmentId = await resolveEquipmentId(uuid);
-    return db
-      .select({
-        equipmentUuid:   equipment.uuid,
-        equipmentNumber: equipment.equipmentNumber,
-        status:          equipmentStatusLogs.status,
-        referenceTable:  equipmentStatusLogs.referenceTable,
-        referenceId:     equipmentStatusLogs.referenceId,
-        remark:          equipmentStatusLogs.remark,
-        createdBy:       users.firstName,
-        createdAt:       equipmentStatusLogs.createdAt,
-      })
-      .from(equipmentStatusLogs)
-      .leftJoin(equipment, eq(equipmentStatusLogs.equipmentId, equipment.id))
-      .leftJoin(users, eq(equipmentStatusLogs.createdBy, users.id))
-      .where(eq(equipmentStatusLogs.equipmentId, equipmentId));
   },
 };

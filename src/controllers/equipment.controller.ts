@@ -136,7 +136,7 @@ export const equipmentController = {
         return errorResponse(c, 'ไม่มีสิทธิ์ลบครุภัณฑ์ใน department อื่น', 403);
       }
 
-      const data = await equipmentService.deleteByUuid(uuid);
+      const data = await equipmentService.deleteByUuid(uuid, user.uuid);
       return successResponse(c, data, 'Equipment deleted successfully');
     } catch (error: any) {
       return errorResponse(c, error.message, 500);
