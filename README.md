@@ -1,9 +1,10 @@
-# Asset Management Backend
+# Equipment-System-Backend
+
 
 Backend API for Asset Management System
 
 🔗 Frontend Repository  
-https://github.com/yourusername/asset-management-frontend
+[https://github.com/yourusername/asset-management-frontend](https://github.com/Bobby9326/Equipment-System-Frontend)
 
 ## Setup
 
