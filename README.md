@@ -2,6 +2,9 @@
 
 Backend API for Asset Management System
 
+🔗 Frontend Repository  
+https://github.com/yourusername/asset-management-frontend
+
 ## Setup
 
 1. Run `npm install`
